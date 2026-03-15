@@ -301,7 +301,6 @@
 	const thead = document.getElementById('tableHead');
 	const tbody = document.getElementById('tableBody');
 
-	// Build Headers
 	let topRow = `<tr><th class="pinned-col" style="display:flex; gap:0.5rem; align-items:center;"><input type="checkbox" id="selectAll" style="width:auto;margin:0;"> Student Name</th><th>Total Ticks</th><th>Status</th>`;
 	let subRow = `<tr id="subHeaders"><th class="pinned-col"></th><th></th><th></th>`;
 
@@ -350,14 +349,12 @@
 	    tbody.innerHTML = tbodyHtml;
 	}
 
-	// Attach Events
 	['keyup','change'].forEach(evt => {
 	    document.getElementById('searchInput').addEventListener(evt, renderTable);
 	    document.getElementById('sortSelect').addEventListener(evt, renderTable);
 	    document.getElementById('failFilter').addEventListener(evt, renderTable);
 	});
 
-	// Checkbox & Delete Logic
 	document.getElementById('selectAll').addEventListener('change', function(e) {
 	    document.querySelectorAll('.student-cb').forEach(cb => cb.checked = e.target.checked);
 	    toggleDeleteBtn();
@@ -368,7 +365,6 @@
 	    document.getElementById('deleteBtn').style.display = checked > 0 ? 'block' : 'none';
 	}
 
-	// Hover Highlight
 	tbody.addEventListener('mouseover', e => {
 	    let td = e.target.closest('td.prac-cell');
 	    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.add('prac-hover-highlight'));

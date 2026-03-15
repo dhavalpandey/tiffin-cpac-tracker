@@ -124,7 +124,6 @@ def login_teacher():
         email, password = request.form.get('email').strip().lower(), request.form.get('password')
         user = Teacher.query.filter_by(email=email).first()
         if user:
-            # First Time Login Logic
             if user.password is None:
                 user.password = generate_password_hash(password)
                 db.session.commit()
@@ -181,7 +180,7 @@ def add_teacher():
             first_name=request.form.get('first_name').strip(),
             last_name=request.form.get('last_name').strip(),
             email=email,
-            password=None # They will set it on first login
+            password=None 
         ))
         db.session.commit()
         flash('Teacher added. They can set their password on their first login.', 'success')
@@ -196,7 +195,7 @@ def edit_teacher(id):
     if new_pass:
         teacher.password = generate_password_hash(new_pass)
     db.session.commit()
-    flash(f"Updated details for {teacher.first_name} {teacher.last_name}.", 'success')
+    flash(f"Updated details for {teacher.title} {teacher.last_name}.", 'success')
     return redirect(url_for('dashboard'))
 
 @app.route('/teacher/delete/<int:id>', methods=['POST'])
@@ -232,7 +231,6 @@ def cohort_view(id):
             prac_totals[a.practical_id] += 1
             assessed_cells[a.practical_id][sk_name] = True
             
-        # Strict Pass/Fail criteria: Every single one of the 11 skills must have >= 3 ticks
         status = "Fail" if any(count < 3 for count in skill_totals.values()) else "Pass"
         students_data.append({'id': s.id, 'first_name': s.first_name, 'last_name': s.last_name, 'total_ticks': len(assessments), 'status': status, 'skill_totals': skill_totals, 'prac_totals': prac_totals, 'assessed_cells': assessed_cells})
 
@@ -318,7 +316,11 @@ def grade(student_id, prac_id):
 
     assessments = Assessment.query.filter_by(student_id=student.id, practical_id=practical.id).all()
     assessed_skill_ids = {a.skill_id: a for a in assessments}
-    signatures = {a.skill_id: f"{Teacher.query.get(a.teacher_id).first_name[0]} {Teacher.query.get(a.teacher_id).last_name} ({a.date_signed.strftime('%d/%m/%Y')})" for a in assessments}
+    
+    signatures = {}
+    for a in assessments:
+        t = Teacher.query.get(a.teacher_id)
+        signatures[a.skill_id] = f"{t.title} {t.first_name[0]} {t.last_name} ({a.date_signed.strftime('%d/%m/%Y')})"
 
     return render_template('grade.html', student=student, practical=practical, skills=skills, assessed=assessed_skill_ids, signatures=signatures)
 
@@ -326,20 +328,19 @@ def grade(student_id, prac_id):
 def seed_database():
     with app.app_context():
         db.create_all()
-        # Seed Teachers
         if not Teacher.query.first():
             teachers = [
                 ("Mrs", "Ann", "Noble", "ANoble@tiffin.kingston.sch.uk"),
                 ("Mr", "Kurt", "Braganza", "KBraganza@tiffin.kingston.sch.uk"),
                 ("Dr", "Matteo", "Bocchi", "MBocchi@tiffin.kingston.sch.uk"),
                 ("Dr", "Payal", "Tyagi", "PTyagi@tiffin.kingston.sch.uk"),
-                ("Mr", "Tom", "Wightwick", "TWightwick@tiffin.kingston.sch.uk")
+                ("Mr", "Tom", "Wightwick", "TWightwick@tiffin.kingston.sch.uk"),
+                ("Mr", "Dhaval", "Pandey", "6060@tiffin.kingston.sch.uk")
             ]
             for t, f, l, e in teachers:
                 db.session.add(Teacher(title=t, first_name=f, last_name=l, email=e.lower(), password=None))
             db.session.commit()
 
-        # Seed Skills and Practicals
         if not Skill.query.first():
             skill_definitions = {
                 '1a': "Correctly follows written instructions...", '2a': "Correctly uses appropriate instrumentation...", '2b': "Carries out techniques methodically...",

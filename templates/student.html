@@ -1,0 +1,105 @@
+{% extends 'base.html' %} {% block content %}
+<div
+	style="
+		background: white;
+		padding: 2.5rem;
+		border-radius: 12px;
+		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+		max-width: 800px;
+		margin: 0 auto;
+	">
+	<h2 style="margin-top: 0">
+		{{ student.last_name }}, {{ student.first_name }}
+	</h2>
+
+	{% if current_user.role == 'teacher' %}
+	<a
+		href="{{ url_for('cohort_view', id=student.cohort_id) }}"
+		class="btn btn-outline"
+		style="margin-bottom: 1.5rem; display: inline-block"
+		>&larr; Back to Cohort</a
+	>
+	{% endif %}
+
+	<h3 style="margin-top: 1.5rem">
+		Scores in terms of CPACs taken from Tiffin Physics (as of {{ date }}):
+	</h3>
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 2rem">
+		{% for p, count in prac_scores.items() %}
+		<tr>
+			<td
+				style="
+					padding: 0.75rem;
+					border-bottom: 1px solid var(--border);
+				">
+				<a
+					href="{{ url_for('grade', student_id=student.id, prac_id=p.id) }}"
+					style="
+						text-decoration: none;
+						color: var(--primary);
+						font-weight: 500;
+					"
+					>{{ p.name }}</a
+				>
+			</td>
+			<td
+				style="
+					padding: 0.75rem;
+					border-bottom: 1px solid var(--border);
+					text-align: right;
+					font-weight: 600;
+				">
+				{{ count }}
+			</td>
+		</tr>
+		{% endfor %}
+		<tr style="background: #f8f9fa">
+			<td style="padding: 0.75rem; font-weight: bold">Total score</td>
+			<td style="padding: 0.75rem; text-align: right; font-weight: bold">
+				{{ total_score }}
+			</td>
+		</tr>
+	</table>
+
+	<h3 style="margin-top: 2rem">
+		Scores in terms of skills taken from Tiffin Physics (as of {{ date }}):
+	</h3>
+	<p style="color: #6c757d; font-style: italic; margin-bottom: 1rem">
+		- Need a minimum of 3 points for each skill
+	</p>
+
+	<div
+		style="
+			display: flex;
+			flex-wrap: wrap;
+			gap: 1rem;
+			margin-bottom: 1.5rem;
+		">
+		{% for sk, count in skill_scores.items() %}
+		<div
+			style="flex: 1 1 calc(20% - 1rem); background: {% if count < 3 %}#f8d7da{% else %}#d1e7dd{% endif %}; padding: 1.2rem; border-radius: 8px; text-align: center; border: 1px solid {% if count < 3 %}#f5c2c7{% else %}#badbcc{% endif %};">
+			<strong
+				style="display: block; font-size: 1.1rem; margin-bottom: 0.5rem"
+				>{{ sk.name }}</strong
+			>
+			<span style="font-size: 1.2rem; font-weight: bold"
+				>{{ count }}</span
+			>
+		</div>
+		{% endfor %}
+	</div>
+
+	<div
+		style="
+			background: #f8f9fa;
+			padding: 1.2rem;
+			text-align: right;
+			border-radius: 8px;
+			border: 1px solid var(--border);
+		">
+		<strong style="font-size: 1.1rem"
+			>Total score: {{ total_score }}</strong
+		>
+	</div>
+</div>
+{% endblock %}
