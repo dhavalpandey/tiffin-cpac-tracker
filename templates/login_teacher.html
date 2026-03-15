@@ -1,16 +1,28 @@
 {% extends 'base.html' %} {% block content %}
 <div
 	style="
-		max-width: 400px;
-		margin: 0 auto;
+		max-width: 420px;
+		margin: 3rem auto;
 		background: white;
-		padding: 2rem;
-		border-radius: 8px;
-		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+		padding: 3rem 2.5rem;
+		border-radius: 12px;
+		box-shadow: 0 8px 25px rgba(0, 0, 0, 0.06);
 	">
-	<h3 style="margin-top: 0">Teacher Login</h3>
+	<h2 style="margin-top: 0; margin-bottom: 0.5rem; text-align: center">
+		Teacher Login
+	</h2>
+	<p
+		style="
+			text-align: center;
+			color: #6c757d;
+			margin-bottom: 2rem;
+			font-size: 0.9rem;
+		">
+		First time logging in? The password you enter will become your permanent
+		password.
+	</p>
 	<form method="POST">
-		<label>Email</label>
+		<label>Email Address</label>
 		<input
 			type="email"
 			name="email"
@@ -18,15 +30,28 @@
 			required />
 		<label>Password</label>
 		<input type="password" name="password" required />
-		<button type="submit" class="btn" style="width: 100%; margin-top: 1rem">
+		<button
+			type="submit"
+			class="btn"
+			style="
+				width: 100%;
+				margin-top: 1rem;
+				padding: 0.8rem;
+				font-size: 1.05rem;
+			">
 			Login
 		</button>
 	</form>
-	<p style="text-align: center; margin-top: 1.5rem">
-		<a href="{{ url_for('register') }}">Need an account?</a>
-	</p>
-	<p style="text-align: center; margin-top: 0.5rem">
-		<a href="{{ url_for('home') }}">Back to Home</a>
+	<p style="text-align: center; margin-top: 2rem">
+		<a
+			href="{{ url_for('home') }}"
+			style="
+				color: var(--primary);
+				text-decoration: none;
+				font-weight: 500;
+			"
+			>&larr; Back to Home</a
+		>
 	</p>
 </div>
 {% endblock %}

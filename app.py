@@ -19,34 +19,31 @@ login_manager.login_view = 'home'
 class Teacher(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
+    password = db.Column(db.String(200), nullable=True) # Nullable for first-time login
     title = db.Column(db.String(10), nullable=False)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
 
     @property
-    def role(self):
-        return 'teacher'
-    def get_id(self):
-        return f"teacher_{self.id}"
+    def role(self): return 'teacher'
+    def get_id(self): return f"teacher_{self.id}"
 
 class Cohort(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     start_year = db.Column(db.Integer, nullable=False)
     end_year = db.Column(db.Integer, nullable=False)
-    students = db.relationship('Student', backref='cohort', lazy=True)
+    students = db.relationship('Student', backref='cohort', lazy=True, cascade="all, delete-orphan")
 
 class Student(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     cohort_id = db.Column(db.Integer, db.ForeignKey('cohort.id'), nullable=False)
+    assessments = db.relationship('Assessment', backref='student_ref', lazy=True, cascade="all, delete-orphan")
 
     @property
-    def role(self):
-        return 'student'
-    def get_id(self):
-        return f"student_{self.id}"
+    def role(self): return 'student'
+    def get_id(self): return f"student_{self.id}"
 
 class Skill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -58,14 +55,14 @@ class Practical(db.Model):
     name = db.Column(db.String(150), nullable=False)
 
 practical_skills = db.Table('practical_skills',
-    db.Column('practical_id', db.Integer, db.ForeignKey('practical.id'), primary_key=True),
-    db.Column('skill_id', db.Integer, db.ForeignKey('skill.id'), primary_key=True)
+    db.Column('practical_id', db.Integer, db.ForeignKey('practical.id', ondelete="CASCADE"), primary_key=True),
+    db.Column('skill_id', db.Integer, db.ForeignKey('skill.id', ondelete="CASCADE"), primary_key=True)
 )
 Practical.skills = db.relationship('Skill', secondary=practical_skills, lazy='subquery', backref=db.backref('practicals', lazy=True))
 
 class Assessment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete="CASCADE"), nullable=False)
     skill_id = db.Column(db.Integer, db.ForeignKey('skill.id'), nullable=False)
     practical_id = db.Column(db.Integer, db.ForeignKey('practical.id'), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
@@ -74,17 +71,14 @@ class Assessment(db.Model):
 # --- AUTH & ACCESS CONTROL ---
 @login_manager.user_loader
 def load_user(user_id):
-    if user_id.startswith('teacher_'):
-        return Teacher.query.get(int(user_id.split('_')[1]))
-    elif user_id.startswith('student_'):
-        return Student.query.get(int(user_id.split('_')[1]))
+    if user_id.startswith('teacher_'): return Teacher.query.get(int(user_id.split('_')[1]))
+    elif user_id.startswith('student_'): return Student.query.get(int(user_id.split('_')[1]))
     return None
 
 def teacher_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role != 'teacher':
-            abort(403)
+        if not current_user.is_authenticated or current_user.role != 'teacher': abort(403)
         return f(*args, **kwargs)
     return decorated_function
 
@@ -113,64 +107,35 @@ def home():
 @app.route('/login/student', methods=['GET', 'POST'])
 def login_student():
     if request.method == 'POST':
-        fname = request.form.get('first_name').strip()
-        lname = request.form.get('last_name').strip()
+        fname, lname = request.form.get('first_name').strip(), request.form.get('last_name').strip()
         year_group = int(request.form.get('year_group'))
-        
         target_end_year = get_academic_end_year() if year_group == 13 else get_academic_end_year() + 1
         
-        student = Student.query.join(Cohort).filter(
-            Student.first_name.ilike(fname),
-            Student.last_name.ilike(lname),
-            Cohort.end_year == target_end_year
-        ).first()
-
+        student = Student.query.join(Cohort).filter(Student.first_name.ilike(fname), Student.last_name.ilike(lname), Cohort.end_year == target_end_year).first()
         if student:
             login_user(student)
             return redirect(url_for('student_view', id=student.id))
-        
-        flash('Student not found. Please check your spelling and year group.', 'error')
+        flash('Student not found in that Year Group. Please check spelling.', 'error')
     return render_template('login_student.html')
 
 @app.route('/login/teacher', methods=['GET', 'POST'])
 def login_teacher():
     if request.method == 'POST':
-        email = request.form.get('email').strip().lower()
-        password = request.form.get('password')
+        email, password = request.form.get('email').strip().lower(), request.form.get('password')
         user = Teacher.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password, password):
-            login_user(user)
-            return redirect(url_for('dashboard'))
+        if user:
+            # First Time Login Logic
+            if user.password is None:
+                user.password = generate_password_hash(password)
+                db.session.commit()
+                login_user(user)
+                flash('First-time login successful. Your password has been set.', 'success')
+                return redirect(url_for('dashboard'))
+            elif check_password_hash(user.password, password):
+                login_user(user)
+                return redirect(url_for('dashboard'))
         flash('Invalid credentials.', 'error')
     return render_template('login_teacher.html')
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        title = request.form.get('title')
-        fname = request.form.get('first_name').strip()
-        lname = request.form.get('last_name').strip()
-        email = request.form.get('email').strip().lower()
-        password = request.form.get('password')
-
-        if not email.endswith('@tiffin.kingston.sch.uk'):
-            flash('Error: Must use a @tiffin.kingston.sch.uk email address.', 'error')
-            return redirect(url_for('register'))
-        
-        if email.split('@')[0].isdigit():
-            flash('Error: Email prefix cannot consist solely of numbers.', 'error')
-            return redirect(url_for('register'))
-
-        if Teacher.query.filter_by(email=email).first():
-            flash('Email already registered.', 'error')
-            return redirect(url_for('register'))
-
-        new_user = Teacher(email=email, title=title, first_name=fname, last_name=lname, password=generate_password_hash(password))
-        db.session.add(new_user)
-        db.session.commit()
-        flash('Registration successful. Please log in.', 'success')
-        return redirect(url_for('login_teacher'))
-    return render_template('register.html')
 
 @app.route('/logout')
 @login_required
@@ -183,7 +148,8 @@ def logout():
 def dashboard():
     cohorts = Cohort.query.order_by(Cohort.end_year.desc()).all()
     cohort_data = [{'id': c.id, 'title': get_cohort_title(c.end_year), 'years': f"{c.start_year}-{c.end_year}", 'student_count': len(c.students)} for c in cohorts]
-    return render_template('dashboard.html', cohorts=cohort_data)
+    teachers = Teacher.query.all()
+    return render_template('dashboard.html', cohorts=cohort_data, teachers=teachers)
 
 @app.route('/cohort/add', methods=['POST'])
 @teacher_required
@@ -193,6 +159,59 @@ def add_cohort():
     flash('Cohort added successfully!', 'success')
     return redirect(url_for('dashboard'))
 
+@app.route('/cohort/delete/<int:id>', methods=['POST'])
+@teacher_required
+def delete_cohort(id):
+    cohort = Cohort.query.get_or_404(id)
+    db.session.delete(cohort)
+    db.session.commit()
+    flash('Cohort and all its students deleted successfully.', 'success')
+    return redirect(url_for('dashboard'))
+
+# --- TEACHER MANAGEMENT ROUTES ---
+@app.route('/teacher/add', methods=['POST'])
+@teacher_required
+def add_teacher():
+    email = request.form.get('email').strip().lower()
+    if Teacher.query.filter_by(email=email).first():
+        flash('Email already registered to a teacher.', 'error')
+    else:
+        db.session.add(Teacher(
+            title=request.form.get('title'),
+            first_name=request.form.get('first_name').strip(),
+            last_name=request.form.get('last_name').strip(),
+            email=email,
+            password=None # They will set it on first login
+        ))
+        db.session.commit()
+        flash('Teacher added. They can set their password on their first login.', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/teacher/edit/<int:id>', methods=['POST'])
+@teacher_required
+def edit_teacher(id):
+    teacher = Teacher.query.get_or_404(id)
+    teacher.title = request.form.get('title')
+    new_pass = request.form.get('new_password')
+    if new_pass:
+        teacher.password = generate_password_hash(new_pass)
+    db.session.commit()
+    flash(f"Updated details for {teacher.first_name} {teacher.last_name}.", 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/teacher/delete/<int:id>', methods=['POST'])
+@teacher_required
+def delete_teacher(id):
+    if current_user.id == id:
+        flash("You cannot delete yourself.", "error")
+        return redirect(url_for('dashboard'))
+    teacher = Teacher.query.get_or_404(id)
+    db.session.delete(teacher)
+    db.session.commit()
+    flash("Teacher deleted.", "success")
+    return redirect(url_for('dashboard'))
+
+# --- COHORT & STUDENT VIEWS ---
 @app.route('/cohort/<int:id>')
 @teacher_required
 def cohort_view(id):
@@ -213,6 +232,7 @@ def cohort_view(id):
             prac_totals[a.practical_id] += 1
             assessed_cells[a.practical_id][sk_name] = True
             
+        # Strict Pass/Fail criteria: Every single one of the 11 skills must have >= 3 ticks
         status = "Fail" if any(count < 3 for count in skill_totals.values()) else "Pass"
         students_data.append({'id': s.id, 'first_name': s.first_name, 'last_name': s.last_name, 'total_ticks': len(assessments), 'status': status, 'skill_totals': skill_totals, 'prac_totals': prac_totals, 'assessed_cells': assessed_cells})
 
@@ -248,6 +268,16 @@ def bulk_add(id):
             db.session.add(Student(first_name=fname, last_name=lname, cohort_id=id))
     db.session.commit()
     flash('Bulk students added successfully.', 'success')
+    return redirect(url_for('cohort_view', id=id))
+
+@app.route('/cohort/<int:id>/delete_students', methods=['POST'])
+@teacher_required
+def delete_students(id):
+    student_ids = request.form.getlist('student_ids')
+    if student_ids:
+        Student.query.filter(Student.id.in_(student_ids)).delete(synchronize_session=False)
+        db.session.commit()
+        flash(f'Deleted {len(student_ids)} student(s).', 'success')
     return redirect(url_for('cohort_view', id=id))
 
 @app.route('/student/<int:id>')
@@ -296,52 +326,44 @@ def grade(student_id, prac_id):
 def seed_database():
     with app.app_context():
         db.create_all()
-        if not Skill.query.first():
-            # 1. Seed exact 11 skills
-            skill_definitions = {
-                '1a': "Correctly follows written instructions to carry out experimental techniques or procedures.",
-                '2a': "Correctly uses appropriate instrumentation, apparatus and materials (including ICT) to carry out investigative activities, experimental techniques and procedures with minimal assistance or prompting.",
-                '2b': "Carries out techniques or procedures methodically, in sequence and in combination, identifying practical issues and making adjustments where necessary.",
-                '2c': "Identifies and controls significant quantitative variables where applicable, and plans approaches to take account of variables that cannot readily be controlled.",
-                '2d': "Selects appropriate equipment and measurement strategies in order to ensure suitably accurate results.",
-                '3a': "Identifies hazards and assesses risks associated with these hazards, making safety adjustments as necessary, when carrying out experimental techniques and procedures in the lab or field.",
-                '3b': "Uses appropriate safety equipment and approaches to minimise risks with minimal prompting.",
-                '4a': "Makes accurate observations relevant to the experimental or investigative procedure.",
-                '4b': "Obtains accurate, precise and sufficient data for experimental and investigative procedures and records this methodically using appropriate units and conventions.",
-                '5a': "Uses appropriate software and/or tools to process data, carry out research and report findings.",
-                '5b': "Cites sources of information demonstrating that research has taken place, supporting planning and conclusions."
-            }
-            skill_objs = {}
-            for k, v in skill_definitions.items():
-                s = Skill(name=k, description=v)
-                db.session.add(s)
-                skill_objs[k] = s
+        # Seed Teachers
+        if not Teacher.query.first():
+            teachers = [
+                ("Mrs", "Ann", "Noble", "ANoble@tiffin.kingston.sch.uk"),
+                ("Mr", "Kurt", "Braganza", "KBraganza@tiffin.kingston.sch.uk"),
+                ("Dr", "Matteo", "Bocchi", "MBocchi@tiffin.kingston.sch.uk"),
+                ("Dr", "Payal", "Tyagi", "PTyagi@tiffin.kingston.sch.uk"),
+                ("Mr", "Tom", "Wightwick", "TWightwick@tiffin.kingston.sch.uk")
+            ]
+            for t, f, l, e in teachers:
+                db.session.add(Teacher(title=t, first_name=f, last_name=l, email=e.lower(), password=None))
             db.session.commit()
 
-            # 2. Seed 16 Practicals and mappings
+        # Seed Skills and Practicals
+        if not Skill.query.first():
+            skill_definitions = {
+                '1a': "Correctly follows written instructions...", '2a': "Correctly uses appropriate instrumentation...", '2b': "Carries out techniques methodically...",
+                '2c': "Identifies and controls significant quantitative variables...", '2d': "Selects appropriate equipment...", '3a': "Identifies hazards and assesses risks...",
+                '3b': "Uses appropriate safety equipment...", '4a': "Makes accurate observations...", '4b': "Obtains accurate data and records methodically...",
+                '5a': "Uses appropriate software to process data...", '5b': "Cites sources of information..."
+            }
+            skill_objs = {k: Skill(name=k, description=v) for k, v in skill_definitions.items()}
+            for s in skill_objs.values(): db.session.add(s)
+            db.session.commit()
+
             practical_mappings = [
-                ("1. Stationary Waves", ['1a', '2c', '3a', '3b', '4a', '4b']),
-                ("2.a Young's slit", ['2a', '2b', '3a', '3b', '4a', '4b']),
-                ("2.b Diffraction Gratings", ['2a', '2b', '2c', '2d', '4a', '4b']),
-                ("3. Determination of g", ['1a', '2a', '2d', '4b', '5a', '5b']),
-                ("4. Young modulus", ['1a', '2c', '2d', '3b', '4a', '5a', '5b']),
-                ("5. Resistivity of a wire", ['2a', '2c', '3b', '4a', '5a', '5b']),
-                ("6. emf", ['2a', '2c', '3b', '4a', '5a', '5b']),
-                ("7.a SHM - Simple Pendulum", ['1a', '2a', '2b', '4b', '5a', '5b']),
-                ("7.b SHM - Mass spring", ['1a', '2a', '2b', '4b']),
-                ("8.a Boyle's Law", ['1a', '2b', '2c', '2d', '3a', '4b']),
-                ("8b Charles' Law", ['1a', '2c', '3a', '3b', '4a', '5a', '5b']),
-                ("9.a Capacitor Discharging", ['1a', '2c', '2d', '3a', '3b', '4a']),
-                ("9.b Capacitor Charging", ['1a', '3b', '4a', '4b']),
-                ("10. Motor Effect", ['2b', '2d', '3a', '3b', '4a', '4b']),
-                ("11. Search Coils", ['1a', '2a', '2c', '2d', '4b']),
-                ("12. Gamma Radiation", ['1a', '2b', '2d', '3a', '3b', '4a', '4b'])
+                ("1. Stationary Waves", ['1a', '2c', '3a', '3b', '4a', '4b']), ("2.a Young's slit", ['2a', '2b', '3a', '3b', '4a', '4b']),
+                ("2.b Diffraction Gratings", ['2a', '2b', '2c', '2d', '4a', '4b']), ("3. Determination of g", ['1a', '2a', '2d', '4b', '5a', '5b']),
+                ("4. Young modulus", ['1a', '2c', '2d', '3b', '4a', '5a', '5b']), ("5. Resistivity of a wire", ['2a', '2c', '3b', '4a', '5a', '5b']),
+                ("6. emf", ['2a', '2c', '3b', '4a', '5a', '5b']), ("7.a SHM - Simple Pendulum", ['1a', '2a', '2b', '4b', '5a', '5b']),
+                ("7.b SHM - Mass spring", ['1a', '2a', '2b', '4b']), ("8.a Boyle's Law", ['1a', '2b', '2c', '2d', '3a', '4b']),
+                ("8b Charles' Law", ['1a', '2c', '3a', '3b', '4a', '5a', '5b']), ("9.a Capacitor Discharging", ['1a', '2c', '2d', '3a', '3b', '4a']),
+                ("9.b Capacitor Charging", ['1a', '3b', '4a', '4b']), ("10. Motor Effect", ['2b', '2d', '3a', '3b', '4a', '4b']),
+                ("11. Search Coils", ['1a', '2a', '2c', '2d', '4b']), ("12. Gamma Radiation", ['1a', '2b', '2d', '3a', '3b', '4a', '4b'])
             ]
-            
             for p_name, s_keys in practical_mappings:
                 p = Practical(name=p_name)
-                for sk in s_keys:
-                    p.skills.append(skill_objs[sk])
+                for sk in s_keys: p.skills.append(skill_objs[sk])
                 db.session.add(p)
             db.session.commit()
 
