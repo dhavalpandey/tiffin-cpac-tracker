@@ -1,0 +1,43 @@
+{% extends 'base.html' %} {% block content %}
+<div
+	style="
+		display: flex;
+		max-width: 900px;
+		margin: 4rem auto;
+		background: white;
+		border-radius: 8px;
+		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+		overflow: hidden;
+	">
+	<div style="flex: 1; padding: 3rem; text-align: center">
+		<h2 style="margin-top: 0">Student Portal</h2>
+		<p style="color: #6c757d; margin-bottom: 2rem">
+			Access your CPAC tracking dashboard, view practical scores, and
+			check skill requirements.
+		</p>
+		<a
+			href="{{ url_for('login_student') }}"
+			class="btn"
+			style="width: 100%; font-size: 1.1rem; padding: 1rem"
+			>Login as Student</a
+		>
+	</div>
+
+	<div style="width: 1px; background: var(--border)"></div>
+
+	<div
+		style="flex: 1; padding: 3rem; text-align: center; background: #fcfcfc">
+		<h2 style="margin-top: 0">Teacher Portal</h2>
+		<p style="color: #6c757d; margin-bottom: 2rem">
+			Manage cohorts, grade practical assessments, and review overall
+			class progression.
+		</p>
+		<a
+			href="{{ url_for('login_teacher') }}"
+			class="btn btn-outline"
+			style="width: 100%; font-size: 1.1rem; padding: 1rem"
+			>Login as Teacher</a
+		>
+	</div>
+</div>
+{% endblock %}
