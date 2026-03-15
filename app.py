@@ -7,8 +7,21 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'tiffin-physics-super-secret'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tiffin_cpac.db'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tiffin-physics-super-secret')
+
+# --- DEV/PROD LOGIC ---
+# If running on Render/Cloud, DATABASE_URL will be set.
+database_url = os.environ.get('DATABASE_URL')
+
+if database_url:
+    # Fix for Heroku/Render postgres string format
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Running on local Macbook
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tiffin_cpac.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
