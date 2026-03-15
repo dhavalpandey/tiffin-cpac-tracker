@@ -1,0 +1,75 @@
+{% extends 'base.html' %} {% block content %}
+<style>
+	.carousel {
+		display: flex;
+		overflow-x: auto;
+		gap: 1rem;
+		padding-bottom: 1rem;
+	}
+	.card {
+		min-width: 250px;
+		background: white;
+		padding: 1.5rem;
+		border-radius: 8px;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		border-left: 5px solid var(--primary);
+	}
+</style>
+<div
+	style="
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 2rem;
+	">
+	<h2>Cohorts Dashboard</h2>
+	<button
+		class="btn"
+		onclick="
+			document.getElementById('addCohortModal').style.display = 'flex'
+		">
+		+ Add New Year Group
+	</button>
+</div>
+
+<div class="carousel">
+	{% for c in cohorts %}
+	<div class="card">
+		<h3>{{ c.title }}</h3>
+		<p style="color: #6c757d">{{ c.years }}</p>
+		<p><strong>{{ c.student_count }}</strong> Students</p>
+		<a
+			href="{{ url_for('cohort_view', id=c.id) }}"
+			class="btn"
+			style="display: block; text-align: center"
+			>View Cohort</a
+		>
+	</div>
+	{% endfor %}
+</div>
+
+<div id="addCohortModal" class="modal">
+	<div class="modal-content">
+		<h3>Add Cohort</h3>
+		<form method="POST" action="{{ url_for('add_cohort') }}">
+			<label>Start Year</label
+			><input type="number" name="start_year" required />
+			<label>End Year</label
+			><input type="number" name="end_year" required />
+			<div style="display: flex; gap: 1rem">
+				<button type="submit" class="btn">Save</button>
+				<button
+					type="button"
+					class="btn btn-outline"
+					onclick="
+						document.getElementById(
+							'addCohortModal',
+						).style.display = 'none'
+					">
+					Cancel
+				</button>
+			</div>
+		</form>
+	</div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'base.html' %} {% block content %}
+<div
+	style="
+		max-width: 450px;
+		margin: 0 auto;
+		background: white;
+		padding: 2rem;
+		border-radius: 8px;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+	">
+	<h3>Teacher Registration</h3>
+	<form method="POST">
+		<label>Title</label>
+		<select name="title" required>
+			<option value="Mr">Mr</option>
+			<option value="Miss">Miss</option>
+			<option value="Mrs">Mrs</option>
+			<option value="Ms">Ms</option>
+			<option value="Dr">Dr</option>
+		</select>
+		<label>First Name</label>
+		<input type="text" name="first_name" required />
+		<label>Surname</label>
+		<input type="text" name="last_name" required />
+		<label>Email</label>
+		<input
+			type="email"
+			name="email"
+			required
+			placeholder="lbrittain@tiffin.kingston.sch.uk" />
+		<label>Password</label>
+		<input type="password" name="password" required />
+		<button type="submit" class="btn" style="width: 100%">Register</button>
+	</form>
+	<p style="text-align: center; margin-top: 1rem">
+		<a href="{{ url_for('login') }}">Back to Login</a>
+	</p>
+</div>
+{% endblock %}

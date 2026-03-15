@@ -1,0 +1,77 @@
+{% extends 'base.html' %} {% block content %}
+<div
+	style="
+		background: white;
+		padding: 2rem;
+		border-radius: 8px;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		max-width: 800px;
+		margin: 0 auto;
+	">
+	<h2>{{ student.first_name }} {{ student.last_name }}</h2>
+	<a
+		href="{{ url_for('cohort_view', id=student.cohort_id) }}"
+		class="btn btn-outline"
+		style="margin-bottom: 1.5rem; display: inline-block"
+		>Back to Cohort</a
+	>
+
+	<h3>
+		Scores in terms of CPACs taken from Tiffin Physics (as of {{ date }}):
+	</h3>
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 1rem">
+		{% for p, count in prac_scores.items() %}
+		<tr>
+			<td style="padding: 0.5rem; border-bottom: 1px solid var(--border)">
+				<a
+					href="{{ url_for('grade', student_id=student.id, prac_id=p.id) }}"
+					style="text-decoration: none; color: var(--primary)"
+					>{{ p.name }}</a
+				>
+			</td>
+			<td
+				style="
+					padding: 0.5rem;
+					border-bottom: 1px solid var(--border);
+					text-align: right;
+				">
+				{{ count }}
+			</td>
+		</tr>
+		{% endfor %}
+		<tr style="font-weight: bold; background: #f1f3f5">
+			<td style="padding: 0.5rem">Total score</td>
+			<td style="padding: 0.5rem; text-align: right">
+				{{ total_score }}
+			</td>
+		</tr>
+	</table>
+
+	<h3 style="margin-top: 2rem">
+		Scores in terms of skills taken from Tiffin Physics (as of {{ date }}):
+	</h3>
+	<p style="color: #6c757d; font-style: italic">
+		- Need a minimum of 3 points for each skill
+	</p>
+
+	<div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem">
+		{% for sk, count in skill_scores.items() %}
+		<div
+			style="flex: 1 1 20%; background: {% if count < 3 %}#f8d7da{% else %}#d1e7dd{% endif %}; padding: 1rem; border-radius: 4px; text-align: center; border: 1px solid var(--border);">
+			<strong>{{ sk.name }}</strong><br />
+			{{ count }}
+		</div>
+		{% endfor %}
+	</div>
+
+	<div
+		style="
+			background: #f1f3f5;
+			padding: 1rem;
+			text-align: right;
+			border-radius: 4px;
+		">
+		<strong>Total score: {{ total_score }}</strong>
+	</div>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends 'base.html' %} {% block content %}
+<div
+	style="
+		background: white;
+		padding: 2rem;
+		border-radius: 8px;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+	">
+	<h2>Grading: {{ practical.name }}</h2>
+	<p>
+		<strong>Student:</strong> {{ student.first_name }} {{ student.last_name
+		}}
+	</p>
+
+	<form method="POST">
+		<table
+			style="width: 100%; border-collapse: collapse; margin-top: 1.5rem">
+			<thead>
+				<tr style="background: #f1f3f5">
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
+							text-align: left;
+						">
+						Skill
+					</th>
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
+							text-align: left;
+						">
+						Description
+					</th>
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
+							text-align: center;
+						">
+						Achieved?
+					</th>
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
+							text-align: left;
+						">
+						Signed By
+					</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for sk in skills %}
+				<tr>
+					<td
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+						">
+						<strong>{{ sk.name }}</strong>
+					</td>
+					<td
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+						">
+						{{ sk.description }}
+					</td>
+					<td
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+							text-align: center;
+						">
+						<input
+							type="checkbox"
+							name="skill_{{ sk.id }}"
+							{%
+							if
+							sk.id
+							in
+							assessed
+							%}checked{%
+							endif
+							%}
+							style="
+								width: 20px;
+								height: 20px;
+								cursor: pointer;
+							" />
+					</td>
+					<td
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+							color: #6c757d;
+						">
+						{% if sk.id in signatures %}{{ signatures[sk.id] }}{%
+						endif %}
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+
+		<div style="margin-top: 2rem; display: flex; gap: 1rem">
+			<button
+				type="submit"
+				class="btn"
+				style="font-size: 1.1rem; padding: 0.75rem 2rem">
+				Save Assessment
+			</button>
+			<a
+				href="{{ url_for('cohort_view', id=student.cohort_id) }}"
+				class="btn btn-outline"
+				style="
+					font-size: 1.1rem;
+					padding: 0.75rem 2rem;
+					display: flex;
+					align-items: center;
+				"
+				>Cancel</a
+			>
+		</div>
+	</form>
+</div>
+{% endblock %}

@@ -1,0 +1,400 @@
+{% extends 'base.html' %} {% block content %}
+<style>
+	.controls {
+		display: flex;
+		gap: 1rem;
+		align-items: center;
+		margin-bottom: 1rem;
+		flex-wrap: wrap;
+		background: white;
+		padding: 1rem;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+	}
+	.table-container {
+		overflow-x: auto;
+		max-height: 70vh;
+		background: white;
+		border-radius: 8px;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+	}
+	table {
+		border-collapse: separate;
+		border-spacing: 0;
+		white-space: nowrap;
+	}
+	th,
+	td {
+		padding: 0.5rem;
+		border-bottom: 1px solid var(--border);
+		border-right: 1px solid var(--border);
+		text-align: center;
+		font-size: 0.85rem;
+	}
+	th {
+		background: #f1f3f5;
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		border-top: 1px solid var(--border);
+	}
+
+	/* Pinned Column & Student Name Hover */
+	.pinned-col {
+		position: sticky;
+		left: 0;
+		background: white;
+		z-index: 15;
+		text-align: left;
+		font-weight: bold;
+		border-right: 2px solid var(--border);
+	}
+	th.pinned-col {
+		z-index: 20;
+		background: #e9ecef;
+	}
+	#subHeaders th {
+		top: 38px;
+	} /* Offset for second header row */
+
+	.student-name-cell {
+		cursor: pointer;
+		transition:
+			background-color 0.1s ease,
+			color 0.1s ease;
+	}
+	.student-name-cell:hover {
+		background-color: #e2e6ea !important;
+		color: var(--primary);
+	}
+
+	/* Group Hover Effect Classes for CPAC cells */
+	.prac-cell {
+		transition: background-color 0.1s ease;
+		font-weight: bold;
+	}
+	.prac-hover-highlight {
+		background-color: #cfe2ff !important;
+		cursor: pointer;
+		color: #084298;
+	}
+</style>
+
+<div
+	style="
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+	">
+	<h2 style="margin: 0">{{ title }} Cohort</h2>
+	<div style="display: flex; gap: 0.5rem">
+		<button
+			class="btn btn-outline"
+			onclick="
+				document.getElementById('manualModal').style.display = 'flex'
+			">
+			+ Manual Add
+		</button>
+		<button
+			class="btn"
+			onclick="
+				document.getElementById('bulkModal').style.display = 'flex'
+			">
+			+ Bulk Add
+		</button>
+	</div>
+</div>
+
+<div class="controls">
+	<input
+		type="text"
+		id="searchInput"
+		placeholder="Search students..."
+		style="width: 250px; margin: 0" />
+	<select id="sortSelect" style="width: 220px; margin: 0">
+		<option value="name_asc">Sort by: Surname Alphabetical</option>
+		<option value="ticks_desc">Sort by: Total Ticks (Descending)</option>
+		<option value="ticks_asc">Sort by: Total Ticks (Ascending)</option>
+	</select>
+	<label
+		style="
+			cursor: pointer;
+			font-weight: 500;
+			color: #495057;
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			margin-left: 1rem;
+		">
+		<input
+			type="checkbox"
+			id="failFilter"
+			style="width: auto; margin: 0; cursor: pointer" />
+		Show only failing students
+	</label>
+</div>
+
+<div class="table-container">
+	<table id="cohortTable">
+		<thead id="tableHead"></thead>
+		<tbody id="tableBody"></tbody>
+	</table>
+</div>
+
+<div id="manualModal" class="modal">
+	<div class="modal-content">
+		<h3 style="margin-top: 0">Manual Add Student</h3>
+		<form method="POST" action="{{ url_for('add_student', id=cohort.id) }}">
+			<input
+				type="text"
+				name="first_name"
+				placeholder="First Name"
+				required />
+			<input
+				type="text"
+				name="last_name"
+				placeholder="Surname"
+				required />
+			<div
+				style="
+					display: flex;
+					justify-content: flex-end;
+					gap: 1rem;
+					margin-top: 1rem;
+				">
+				<button
+					type="button"
+					class="btn btn-outline"
+					onclick="
+						document.getElementById('manualModal').style.display =
+							'none'
+					">
+					Cancel
+				</button>
+				<button type="submit" class="btn">Save</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<div id="bulkModal" class="modal">
+	<div class="modal-content" style="width: 550px">
+		<h3 style="margin-top: 0; margin-bottom: 1.5rem">Bulk Add Students</h3>
+		<form method="POST" action="{{ url_for('bulk_add', id=cohort.id) }}">
+			<div
+				style="
+					margin-bottom: 1.5rem;
+					background: #f8f9fa;
+					padding: 1rem;
+					border-radius: 6px;
+					border: 1px solid var(--border);
+				">
+				<p
+					style="
+						margin-top: 0;
+						margin-bottom: 0.75rem;
+						font-weight: 600;
+						font-size: 0.95rem;
+					">
+					Select Input Format:
+				</p>
+
+				<label
+					style="
+						display: block;
+						margin-bottom: 0.5rem;
+						cursor: pointer;
+						color: #495057;
+					">
+					<input
+						type="radio"
+						name="format"
+						value="First Last"
+						checked
+						style="
+							width: auto;
+							margin-right: 0.5rem;
+							cursor: pointer;
+						" />
+					<strong>First Name, Surname</strong>
+					<span style="color: #6c757d; font-size: 0.9rem"
+						>(e.g. John Smith)</span
+					>
+				</label>
+
+				<label
+					style="
+						display: block;
+						margin-bottom: 0.5rem;
+						cursor: pointer;
+						color: #495057;
+					">
+					<input
+						type="radio"
+						name="format"
+						value="Last, First"
+						style="
+							width: auto;
+							margin-right: 0.5rem;
+							cursor: pointer;
+						" />
+					<strong>Surname, First Name</strong>
+					<span style="color: #6c757d; font-size: 0.9rem"
+						>(e.g. Smith, John)</span
+					>
+				</label>
+
+				<label style="display: block; cursor: pointer; color: #495057">
+					<input
+						type="radio"
+						name="format"
+						value="Last First"
+						style="
+							width: auto;
+							margin-right: 0.5rem;
+							cursor: pointer;
+						" />
+					<strong>Surname First Name</strong>
+					<span style="color: #6c757d; font-size: 0.9rem"
+						>(e.g. Smith John)</span
+					>
+				</label>
+			</div>
+
+			<textarea
+				name="students_data"
+				rows="10"
+				placeholder="Paste your list here, one student per line..."
+				required
+				style="
+					resize: none;
+					font-family: monospace;
+					font-size: 0.9rem;
+					padding: 0.75rem;
+					width: 100%;
+					border: 1px solid var(--border);
+					border-radius: 4px;
+					box-sizing: border-box;
+					margin-bottom: 1.5rem;
+				"></textarea>
+
+			<div style="display: flex; justify-content: flex-end; gap: 1rem">
+				<button
+					type="button"
+					class="btn btn-outline"
+					onclick="
+						document.getElementById('bulkModal').style.display =
+							'none'
+					">
+					Cancel
+				</button>
+				<button type="submit" class="btn">Import Students</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<script>
+	const matrix = {{ matrix | safe }};
+	const students = {{ students_json | safe }};
+	const pracNames = {{ prac_names | safe }};
+
+	const thead = document.getElementById('tableHead');
+	const tbody = document.getElementById('tableBody');
+	const searchInput = document.getElementById('searchInput');
+	const sortSelect = document.getElementById('sortSelect');
+	const failFilter = document.getElementById('failFilter');
+
+	// Build Headers Dynamically based on exact Matrix mapping
+	let topRow = `<tr><th class="pinned-col">Student Name</th><th>Total Ticks</th><th>Status</th>`;
+	let subRow = `<tr id="subHeaders"><th class="pinned-col"></th><th></th><th></th>`;
+
+	matrix.forEach(p => {
+	    topRow += `<th colspan="${p.skills.length}">${p.name}</th>`;
+	    p.skills.forEach(sk => {
+	        subRow += `<th>${sk}</th>`;
+	    });
+	});
+	topRow += `</tr>`;
+	subRow += `</tr>`;
+	thead.innerHTML = topRow + subRow;
+
+	function renderTable() {
+	    let term = searchInput.value.toLowerCase();
+	    let sortMode = sortSelect.value;
+	    let showFailing = failFilter.checked;
+
+	    let filtered = students.filter(s => {
+	        let matchName = s.first_name.toLowerCase().includes(term) || s.last_name.toLowerCase().includes(term);
+	        let matchFail = showFailing ? s.status === 'Fail' : true;
+	        return matchName && matchFail;
+	    });
+
+	    filtered.sort((a, b) => {
+	        if (sortMode === 'name_asc') return a.last_name.localeCompare(b.last_name);
+	        if (sortMode === 'ticks_desc') return b.total_ticks - a.total_ticks;
+	        if (sortMode === 'ticks_asc') return a.total_ticks - b.total_ticks;
+	    });
+
+	    let tbodyHtml = '';
+	    filtered.forEach(s => {
+	        // Clickable cell for the student name
+	        let rowHtml = `<tr class="student-row">
+	            <td class="pinned-col student-name-cell" onclick="window.location.href='/student/${s.id}'" title="View ${s.first_name}'s Profile">
+	                ${s.last_name}, ${s.first_name}
+	            </td>
+	            <td>${s.total_ticks}</td>
+	            <td style="color:${s.status==='Fail'?'red':'green'}">${s.status}</td>`;
+
+	        matrix.forEach(p => {
+	            p.skills.forEach(sk => {
+	                let checked = s.assessed_cells[p.id] && s.assessed_cells[p.id][sk];
+	                let mark = checked ? '✓' : '';
+	                // Clickable cell for the CPAC
+	                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.open('/grade/${s.id}/${p.id}', '_blank')" title="Click to mark: ${p.name}">
+	                                ${mark}
+	                            </td>`;
+	            });
+	        });
+	        rowHtml += `</tr>`;
+	        tbodyHtml += rowHtml;
+	    });
+	    tbody.innerHTML = tbodyHtml;
+	}
+
+	// Attach Event Listeners for Filters
+	searchInput.addEventListener('keyup', renderTable);
+	sortSelect.addEventListener('change', renderTable);
+	failFilter.addEventListener('change', renderTable);
+
+	// Group Hover Logic for Practicals (Event Delegation)
+	tbody.addEventListener('mouseover', function(e) {
+	    let td = e.target.closest('td.prac-cell');
+	    if (!td) return;
+
+	    let pracId = td.getAttribute('data-pracid');
+	    let tr = td.closest('tr');
+
+	    // Find all cells in this exact row that belong to the same practical and highlight them
+	    let cells = tr.querySelectorAll(`td.prac-cell[data-pracid="${pracId}"]`);
+	    cells.forEach(c => c.classList.add('prac-hover-highlight'));
+	});
+
+	tbody.addEventListener('mouseout', function(e) {
+	    let td = e.target.closest('td.prac-cell');
+	    if (!td) return;
+
+	    let pracId = td.getAttribute('data-pracid');
+	    let tr = td.closest('tr');
+
+	    // Remove the highlight class when the mouse leaves the cell
+	    let cells = tr.querySelectorAll(`td.prac-cell[data-pracid="${pracId}"]`);
+	    cells.forEach(c => c.classList.remove('prac-hover-highlight'));
+	});
+
+	// Initial render
+	renderTable();
+</script>
+{% endblock %}
