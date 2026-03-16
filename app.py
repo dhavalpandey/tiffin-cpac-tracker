@@ -11,16 +11,13 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tiffin-physics-super-secret')
 
 # --- DEV/PROD LOGIC ---
-# If running on Render/Cloud, DATABASE_URL will be set.
 database_url = os.environ.get('DATABASE_URL')
 
 if database_url:
-    # Fix for Heroku/Render postgres string format
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
-    # Running on local Macbook
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tiffin_cpac.db'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -33,7 +30,7 @@ login_manager.login_view = 'home'
 class Teacher(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=True) # Nullable for first-time login
+    password = db.Column(db.String(200), nullable=True) 
     title = db.Column(db.String(10), nullable=False)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
@@ -81,6 +78,14 @@ class Assessment(db.Model):
     practical_id = db.Column(db.Integer, db.ForeignKey('practical.id'), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
     date_signed = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Attendance(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete="CASCADE"), nullable=False)
+    practical_id = db.Column(db.Integer, db.ForeignKey('practical.id', ondelete="CASCADE"), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
+    is_present = db.Column(db.Boolean, default=False, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 # --- AUTH & ACCESS CONTROL ---
 @login_manager.user_loader
@@ -292,21 +297,61 @@ def delete_students(id):
         flash(f'Deleted {len(student_ids)} student(s).', 'success')
     return redirect(url_for('cohort_view', id=id))
 
+@app.route('/cohort/<int:cohort_id>/practical/<int:prac_id>/attendance', methods=['GET', 'POST'])
+@teacher_required
+def bulk_attendance(cohort_id, prac_id):
+    cohort = Cohort.query.get_or_404(cohort_id)
+    practical = Practical.query.get_or_404(prac_id)
+    
+    if request.method == 'POST':
+        for student in cohort.students:
+            is_present = request.form.get(f'present_{student.id}') == 'on'
+            att_record = Attendance.query.filter_by(student_id=student.id, practical_id=practical.id).first()
+            
+            if is_present and not att_record:
+                db.session.add(Attendance(student_id=student.id, practical_id=practical.id, teacher_id=current_user.id, is_present=True))
+            elif is_present and att_record and not att_record.is_present:
+                att_record.is_present = True
+                att_record.teacher_id = current_user.id
+                att_record.timestamp = datetime.utcnow()
+            elif not is_present and att_record and att_record.is_present:
+                att_record.is_present = False
+                att_record.teacher_id = current_user.id
+                att_record.timestamp = datetime.utcnow()
+                
+        db.session.commit()
+        flash(f'Bulk attendance updated successfully for {practical.name}.', 'success')
+        return redirect(url_for('cohort_view', id=cohort_id))
+        
+    attendances = Attendance.query.filter(Attendance.student_id.in_([s.id for s in cohort.students]), Attendance.practical_id == practical.id).all()
+    att_dict = {a.student_id: a for a in attendances}
+    
+    signatures = {}
+    for a in attendances:
+        if a.is_present:
+            t = Teacher.query.get(a.teacher_id)
+            signatures[a.student_id] = f"{t.title} {t.first_name[0]} {t.last_name} ({a.timestamp.strftime('%d/%m/%Y')})"
+            
+    sorted_students = sorted(cohort.students, key=lambda s: s.last_name)
+    return render_template('practical_attendance.html', cohort=cohort, practical=practical, students=sorted_students, att_dict=att_dict, signatures=signatures)
+
 @app.route('/student/<int:id>')
 @login_required
 def student_view(id):
     if current_user.role == 'student' and current_user.id != id: abort(403)
     student = Student.query.get_or_404(id)
     assessments = Assessment.query.filter_by(student_id=student.id).all()
+    attendances = Attendance.query.filter_by(student_id=student.id).all()
     
     prac_scores = {p: 0 for p in Practical.query.all()}
     skill_scores = {sk: 0 for sk in Skill.query.all()}
+    attendance_status = {a.practical_id: a.is_present for a in attendances}
     
     for a in assessments:
         prac_scores[Practical.query.get(a.practical_id)] += 1
         skill_scores[Skill.query.get(a.skill_id)] += 1
         
-    return render_template('student.html', student=student, prac_scores=prac_scores, skill_scores=skill_scores, total_score=len(assessments), date=datetime.utcnow().strftime('%d/%m/%Y'))
+    return render_template('student.html', student=student, prac_scores=prac_scores, skill_scores=skill_scores, total_score=len(assessments), date=datetime.utcnow().strftime('%d/%m/%Y'), attendance_status=attendance_status)
 
 @app.route('/grade/<int:student_id>/<int:prac_id>', methods=['GET', 'POST'])
 @login_required
@@ -317,6 +362,22 @@ def grade(student_id, prac_id):
     skills = practical.skills
     
     if request.method == 'POST' and current_user.role == 'teacher':
+        # Handle Attendance Logic
+        is_present = request.form.get('attendance_present') == 'on'
+        att_record = Attendance.query.filter_by(student_id=student.id, practical_id=practical.id).first()
+        
+        if is_present and not att_record:
+            db.session.add(Attendance(student_id=student.id, practical_id=practical.id, teacher_id=current_user.id, is_present=True))
+        elif is_present and att_record and not att_record.is_present:
+            att_record.is_present = True
+            att_record.teacher_id = current_user.id
+            att_record.timestamp = datetime.utcnow()
+        elif not is_present and att_record and att_record.is_present:
+            att_record.is_present = False
+            att_record.teacher_id = current_user.id
+            att_record.timestamp = datetime.utcnow()
+
+        # Handle Skill Assessment Logic
         for sk in skills:
             achieved = request.form.get(f'skill_{sk.id}') == 'on'
             existing = Assessment.query.filter_by(student_id=student.id, skill_id=sk.id, practical_id=practical.id).first()
@@ -324,6 +385,7 @@ def grade(student_id, prac_id):
                 db.session.add(Assessment(student_id=student.id, skill_id=sk.id, practical_id=practical.id, teacher_id=current_user.id))
             elif not achieved and existing:
                 db.session.delete(existing)
+                
         db.session.commit()
         flash('Updated Successfully', 'success')
         return redirect(url_for('cohort_view', id=student.cohort_id))
@@ -336,14 +398,19 @@ def grade(student_id, prac_id):
         t = Teacher.query.get(a.teacher_id)
         signatures[a.skill_id] = f"{t.title} {t.first_name[0]} {t.last_name} ({a.date_signed.strftime('%d/%m/%Y')})"
 
-    return render_template('grade.html', student=student, practical=practical, skills=skills, assessed=assessed_skill_ids, signatures=signatures)
+    att_record = Attendance.query.filter_by(student_id=student.id, practical_id=practical.id).first()
+    att_signature = ""
+    if att_record and att_record.is_present:
+        t = Teacher.query.get(att_record.teacher_id)
+        att_signature = f"{t.title} {t.first_name[0]} {t.last_name} ({att_record.timestamp.strftime('%d/%m/%Y')})"
+
+    return render_template('grade.html', student=student, practical=practical, skills=skills, assessed=assessed_skill_ids, signatures=signatures, attendance=att_record, att_signature=att_signature)
 
 @app.route('/export_data')
 @teacher_required
 def export_data():
     wb = Workbook()
     
-    # 1. Teachers Sheet
     ws_teachers = wb.active
     ws_teachers.title = "Teachers"
     ws_teachers.append(["ID", "Title", "First Name", "Last Name", "Email", "Account Status"])
@@ -351,31 +418,26 @@ def export_data():
         status = "Active" if t.password else "Pending Setup"
         ws_teachers.append([t.id, t.title, t.first_name, t.last_name, t.email, status])
         
-    # 2. Cohorts Sheet
     ws_cohorts = wb.create_sheet("Cohorts")
     ws_cohorts.append(["ID", "Start Year", "End Year"])
     for c in Cohort.query.all():
         ws_cohorts.append([c.id, c.start_year, c.end_year])
 
-    # 3. Students Sheet
     ws_students = wb.create_sheet("Students")
     ws_students.append(["ID", "First Name", "Last Name", "Cohort ID"])
     for s in Student.query.all():
         ws_students.append([s.id, s.first_name, s.last_name, s.cohort_id])
 
-    # 4. Skills Sheet
     ws_skills = wb.create_sheet("Skills")
     ws_skills.append(["ID", "Skill Name", "Description"])
     for sk in Skill.query.all():
         ws_skills.append([sk.id, sk.name, sk.description])
 
-    # 5. Practicals Sheet
     ws_practicals = wb.create_sheet("Practicals")
     ws_practicals.append(["ID", "Practical Name"])
     for p in Practical.query.all():
         ws_practicals.append([p.id, p.name])
 
-    # 6. Assessments (The actual ticks/marks)
     ws_assessments = wb.create_sheet("Assessments_Log")
     ws_assessments.append(["Record ID", "Student ID", "Student Name", "Skill ID", "Practical ID", "Teacher ID", "Date Signed"])
     for a in Assessment.query.all():
@@ -384,12 +446,15 @@ def export_data():
         date_str = a.date_signed.strftime('%d/%m/%Y %H:%M') if a.date_signed else ""
         ws_assessments.append([a.id, a.student_id, student_name, a.skill_id, a.practical_id, a.teacher_id, date_str])
 
-    # Save to an in-memory buffer so we don't clog up the server's hard drive
+    ws_attendance = wb.create_sheet("Attendance_Log")
+    ws_attendance.append(["Record ID", "Student ID", "Practical ID", "Teacher ID", "Is Present", "Timestamp"])
+    for a in Attendance.query.all():
+        ws_attendance.append([a.id, a.student_id, a.practical_id, a.teacher_id, a.is_present, a.timestamp.strftime('%d/%m/%Y %H:%M') if a.timestamp else ""])
+
     out = io.BytesIO()
     wb.save(out)
     out.seek(0)
     
-    # Send the file to the browser
     filename = f"Tiffin_CPAC_Database_Export_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     return send_file(
         out, 

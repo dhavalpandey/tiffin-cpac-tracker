@@ -68,10 +68,10 @@
 	.prac-cell {
 		transition: background-color 0.1s ease;
 		font-weight: bold;
+		cursor: pointer;
 	}
 	.prac-hover-highlight {
 		background-color: #eef3fc !important;
-		cursor: pointer;
 		color: #084298;
 	}
 	.cell-link {
@@ -81,6 +81,13 @@
 		width: 100%;
 		height: 100%;
 		font-weight: bold;
+	}
+	.prac-header-link {
+		color: var(--primary);
+		text-decoration: none;
+	}
+	.prac-header-link:hover {
+		text-decoration: underline;
 	}
 </style>
 
@@ -300,12 +307,13 @@
 	const students = {{ students_json | safe }};
 	const thead = document.getElementById('tableHead');
 	const tbody = document.getElementById('tableBody');
+	const cohort_id = {{ cohort.id }};
 
 	let topRow = `<tr><th class="pinned-col" style="display:flex; gap:0.5rem; align-items:center;"><input type="checkbox" id="selectAll" style="width:auto;margin:0;"> Student Name</th><th>Total Ticks</th><th>Status</th>`;
 	let subRow = `<tr id="subHeaders"><th class="pinned-col"></th><th></th><th></th>`;
 
 	matrix.forEach(p => {
-	    topRow += `<th colspan="${p.skills.length}">${p.name}</th>`;
+	    topRow += `<th colspan="${p.skills.length}"><a href="/cohort/${cohort_id}/practical/${p.id}/attendance" class="prac-header-link" title="Mark Bulk Attendance">${p.name}</a></th>`;
 	    p.skills.forEach(sk => subRow += `<th>${sk}</th>`);
 	});
 	topRow += `</tr>`; subRow += `</tr>`;
@@ -340,7 +348,7 @@
 	        matrix.forEach(p => {
 	            p.skills.forEach(sk => {
 	                let checked = s.assessed_cells[p.id] && s.assessed_cells[p.id][sk];
-	                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.open('/grade/${s.id}/${p.id}', '_blank')">${checked ? '✓' : ''}</td>`;
+	                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${checked ? '✓' : ''}</td>`;
 	            });
 	        });
 	        rowHtml += `</tr>`;

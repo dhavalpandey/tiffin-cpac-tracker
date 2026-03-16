@@ -20,6 +20,16 @@
 						style="
 							padding: 1rem;
 							border-bottom: 2px solid var(--border);
+							text-align: center;
+							background-color: #e0f0ff;
+							width: 120px;
+						">
+						Present?
+					</th>
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
 							text-align: left;
 						">
 						Skill
@@ -53,6 +63,79 @@
 			<tbody>
 				{% for sk in skills %}
 				<tr>
+					{% if loop.first %}
+					<td
+						rowspan="{{ skills|length }}"
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+							border-right: 2px solid #e0e0e0;
+							background-color: #f0f7ff;
+							text-align: center;
+							vertical-align: middle;
+						">
+						{% if current_user.role == 'teacher' %}
+						<label
+							style="
+								display: flex;
+								flex-direction: column;
+								align-items: center;
+								gap: 0.5rem;
+								cursor: pointer;
+							">
+							<input
+								type="checkbox"
+								name="attendance_present"
+								{%
+								if
+								attendance
+								and
+								attendance.is_present
+								%}checked{%
+								endif
+								%}
+								style="
+									width: 25px;
+									height: 25px;
+									cursor: pointer;
+								" />
+							<span style="font-weight: 500">Mark Present</span>
+						</label>
+						{% else %} {% if attendance and attendance.is_present %}
+						<span
+							style="
+								color: #0f5132;
+								font-weight: bold;
+								font-size: 1.1rem;
+								display: block;
+								margin-bottom: 0.5rem;
+							"
+							>✅ Present</span
+						>
+						{% else %}
+						<span
+							style="
+								color: #dc3545;
+								font-weight: bold;
+								font-size: 1.1rem;
+								display: block;
+								margin-bottom: 0.5rem;
+							"
+							>❌ Absent</span
+						>
+						{% endif %} {% endif %} {% if att_signature %}
+						<div
+							style="
+								font-size: 0.85rem;
+								color: #6c757d;
+								margin-top: 0.5rem;
+								font-weight: 500;
+							">
+							{{ att_signature }}
+						</div>
+						{% endif %}
+					</td>
+					{% endif %}
 					<td
 						style="
 							padding: 1rem;

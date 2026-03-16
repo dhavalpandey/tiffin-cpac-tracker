@@ -25,40 +25,99 @@
 		Scores in terms of CPACs taken from Tiffin Physics (as of {{ date }}):
 	</h3>
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 2rem">
-		{% for p, count in prac_scores.items() %}
-		<tr>
-			<td
-				style="
-					padding: 0.75rem;
-					border-bottom: 1px solid var(--border);
-				">
-				<a
-					href="{{ url_for('grade', student_id=student.id, prac_id=p.id) }}"
+		<thead>
+			<tr style="background: #f8f9fa">
+				<th
 					style="
-						text-decoration: none;
-						color: var(--primary);
-						font-weight: 500;
-					"
-					>{{ p.name }}</a
-				>
-			</td>
-			<td
-				style="
-					padding: 0.75rem;
-					border-bottom: 1px solid var(--border);
-					text-align: right;
-					font-weight: 600;
-				">
-				{{ count }}
-			</td>
-		</tr>
-		{% endfor %}
-		<tr style="background: #f8f9fa">
-			<td style="padding: 0.75rem; font-weight: bold">Total score</td>
-			<td style="padding: 0.75rem; text-align: right; font-weight: bold">
-				{{ total_score }}
-			</td>
-		</tr>
+						padding: 0.75rem;
+						border-bottom: 2px solid var(--border);
+						text-align: center;
+						background-color: #e0f0ff;
+						width: 120px;
+					">
+					Present?
+				</th>
+				<th
+					style="
+						padding: 0.75rem;
+						border-bottom: 2px solid var(--border);
+						text-align: left;
+					">
+					Practical
+				</th>
+				<th
+					style="
+						padding: 0.75rem;
+						border-bottom: 2px solid var(--border);
+						text-align: right;
+					">
+					Score
+				</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for p, count in prac_scores.items() %}
+			<tr>
+				<td
+					style="
+						padding: 0.75rem;
+						border-bottom: 1px solid var(--border);
+						background-color: #f0f7ff;
+						text-align: center;
+					">
+					{% if attendance_status.get(p.id) %}
+					<span style="color: #0f5132; font-weight: bold"
+						>✅ Present</span
+					>
+					{% else %}
+					<span style="color: #dc3545; font-weight: bold"
+						>❌ Absent</span
+					>
+					{% endif %}
+				</td>
+				<td
+					style="
+						padding: 0.75rem;
+						border-bottom: 1px solid var(--border);
+					">
+					<a
+						href="{{ url_for('grade', student_id=student.id, prac_id=p.id) }}"
+						style="
+							text-decoration: none;
+							color: var(--primary);
+							font-weight: 500;
+						"
+						>{{ p.name }}</a
+					>
+				</td>
+				<td
+					style="
+						padding: 0.75rem;
+						border-bottom: 1px solid var(--border);
+						text-align: right;
+						font-weight: 600;
+					">
+					{{ count }}
+				</td>
+			</tr>
+			{% endfor %}
+			<tr style="background: #f8f9fa">
+				<td
+					style="
+						padding: 0.75rem;
+						border-bottom: 1px solid var(--border);
+					"></td>
+				<td style="padding: 0.75rem; font-weight: bold">Total score</td>
+				<td
+					style="
+						padding: 0.75rem;
+						text-align: right;
+						font-weight: bold;
+					">
+					{{ total_score }}
+				</td>
+			</tr>
+		</tbody>
 	</table>
 
 	<h3 style="margin-top: 2rem">

@@ -1,0 +1,126 @@
+{% extends 'base.html' %} {% block content %}
+<div
+	style="
+		background: white;
+		padding: 2.5rem;
+		border-radius: 12px;
+		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+		max-width: 900px;
+		margin: 0 auto;
+	">
+	<h2 style="margin-top: 0">Bulk Attendance: {{ practical.name }}</h2>
+	<p style="font-size: 1.1rem; margin-bottom: 2rem">
+		<strong>Cohort:</strong> {{ cohort.start_year }} - {{ cohort.end_year }}
+	</p>
+
+	<form method="POST">
+		<table style="width: 100%; border-collapse: collapse">
+			<thead>
+				<tr style="background: #f8f9fa">
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
+							text-align: center;
+							background-color: #e0f0ff;
+							width: 100px;
+						">
+						Present?
+					</th>
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
+							text-align: left;
+						">
+						Student Name
+					</th>
+					<th
+						style="
+							padding: 1rem;
+							border-bottom: 2px solid var(--border);
+							text-align: left;
+						">
+						Signed By
+					</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for student in students %}
+				<tr>
+					<td
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+							background-color: #f0f7ff;
+							text-align: center;
+						">
+						<input
+							type="checkbox"
+							name="present_{{ student.id }}"
+							{%
+							if
+							att_dict.get(student.id)
+							and
+							att_dict[student.id].is_present
+							%}checked{%
+							endif
+							%}
+							style="
+								width: 22px;
+								height: 22px;
+								cursor: pointer;
+							" />
+					</td>
+					<td
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+						">
+						<a
+							href="{{ url_for('grade', student_id=student.id, prac_id=practical.id) }}"
+							style="
+								text-decoration: none;
+								color: inherit;
+								font-weight: 500;
+							">
+							{{ student.last_name }}, {{ student.first_name }}
+						</a>
+					</td>
+					<td
+						style="
+							padding: 1rem;
+							border-bottom: 1px solid var(--border);
+							color: #6c757d;
+							font-weight: 500;
+						">
+						{% if student.id in signatures %}{{
+						signatures[student.id] }}{% endif %}
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+
+		<div style="margin-top: 2.5rem; display: flex; gap: 1rem">
+			<button
+				type="submit"
+				class="btn"
+				style="font-size: 1.1rem; padding: 0.75rem 2rem">
+				Save Attendance
+			</button>
+			<a
+				href="{{ url_for('cohort_view', id=cohort.id) }}"
+				class="btn btn-outline"
+				style="
+					font-size: 1.1rem;
+					padding: 0.75rem 2rem;
+					display: flex;
+					align-items: center;
+				"
+				>Cancel</a
+			>
+		</div>
+	</form>
+</div>
+{% endblock %}
