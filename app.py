@@ -6,18 +6,26 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import Workbook
+from dotenv import load_dotenv # <-- NEW: Import dotenv
+
+# <-- NEW: Load the .env file immediately
+load_dotenv() 
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tiffin-physics-super-secret')
 
-# --- DEV/PROD LOGIC ---
-database_url = os.environ.get('DATABASE_URL')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-dev-key-only')
 
-if database_url:
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+# --- DATABASE CONFIGURATION ---
+env = os.environ.get('FLASK_ENV', 'development').lower()
+custom_db_url = os.environ.get('DATABASE_URL')
+
+if custom_db_url:
+    # In production, it reads the secure absolute path from the .env file
+    app.config['SQLALCHEMY_DATABASE_URI'] = custom_db_url
+elif env == 'production':
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prod_tiffin_cpac.db'
 else:
+    # Local development database
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tiffin_cpac.db'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
