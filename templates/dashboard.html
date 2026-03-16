@@ -52,13 +52,32 @@
 		margin-bottom: 1.5rem;
 	">
 	<h2 style="margin: 0">Cohorts Dashboard</h2>
-	<button
-		class="btn"
-		onclick="
-			document.getElementById('addCohortModal').style.display = 'flex'
-		">
-		+ Add Year Group
-	</button>
+	<div style="display: flex; gap: 1rem">
+		<a
+			href="{{ url_for('export_data') }}"
+			class="btn btn-outline"
+			style="display: flex; align-items: center; gap: 0.5rem">
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="16"
+				height="16"
+				fill="currentColor"
+				viewBox="0 0 16 16">
+				<path
+					d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
+				<path
+					d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
+			</svg>
+			Export All Data
+		</a>
+		<button
+			class="btn"
+			onclick="
+				document.getElementById('addCohortModal').style.display = 'flex'
+			">
+			+ Add Year Group
+		</button>
+	</div>
 </div>
 
 <div class="carousel">
@@ -165,10 +184,10 @@
 	<div class="modal-content" style="width: 350px">
 		<h3 style="margin-top: 0">Add Cohort</h3>
 		<form method="POST" action="{{ url_for('add_cohort') }}">
-			<label>Start Year</label
-			><input type="number" name="start_year" required />
-			<label>End Year</label
-			><input type="number" name="end_year" required />
+			<label>Start Year</label>
+			<input type="number" name="start_year" required />
+			<label>End Year</label>
+			<input type="number" name="end_year" required />
 			<div
 				style="
 					display: flex;
@@ -204,11 +223,12 @@
 				<option>Ms</option>
 				<option>Dr</option>
 			</select>
-			<label>First Name</label
-			><input type="text" name="first_name" required />
-			<label>Surname</label
-			><input type="text" name="last_name" required /> <label>Email</label
-			><input type="email" name="email" required />
+			<label>First Name</label>
+			<input type="text" name="first_name" required />
+			<label>Surname</label>
+			<input type="text" name="last_name" required />
+			<label>Email</label>
+			<input type="email" name="email" required />
 			<div
 				style="
 					display: flex;

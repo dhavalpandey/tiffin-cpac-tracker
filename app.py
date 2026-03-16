@@ -1,10 +1,11 @@
-import os, json
+import os, json, io
 from datetime import datetime
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from openpyxl import Workbook
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tiffin-physics-super-secret')
@@ -336,6 +337,66 @@ def grade(student_id, prac_id):
         signatures[a.skill_id] = f"{t.title} {t.first_name[0]} {t.last_name} ({a.date_signed.strftime('%d/%m/%Y')})"
 
     return render_template('grade.html', student=student, practical=practical, skills=skills, assessed=assessed_skill_ids, signatures=signatures)
+
+@app.route('/export_data')
+@teacher_required
+def export_data():
+    wb = Workbook()
+    
+    # 1. Teachers Sheet
+    ws_teachers = wb.active
+    ws_teachers.title = "Teachers"
+    ws_teachers.append(["ID", "Title", "First Name", "Last Name", "Email", "Account Status"])
+    for t in Teacher.query.all():
+        status = "Active" if t.password else "Pending Setup"
+        ws_teachers.append([t.id, t.title, t.first_name, t.last_name, t.email, status])
+        
+    # 2. Cohorts Sheet
+    ws_cohorts = wb.create_sheet("Cohorts")
+    ws_cohorts.append(["ID", "Start Year", "End Year"])
+    for c in Cohort.query.all():
+        ws_cohorts.append([c.id, c.start_year, c.end_year])
+
+    # 3. Students Sheet
+    ws_students = wb.create_sheet("Students")
+    ws_students.append(["ID", "First Name", "Last Name", "Cohort ID"])
+    for s in Student.query.all():
+        ws_students.append([s.id, s.first_name, s.last_name, s.cohort_id])
+
+    # 4. Skills Sheet
+    ws_skills = wb.create_sheet("Skills")
+    ws_skills.append(["ID", "Skill Name", "Description"])
+    for sk in Skill.query.all():
+        ws_skills.append([sk.id, sk.name, sk.description])
+
+    # 5. Practicals Sheet
+    ws_practicals = wb.create_sheet("Practicals")
+    ws_practicals.append(["ID", "Practical Name"])
+    for p in Practical.query.all():
+        ws_practicals.append([p.id, p.name])
+
+    # 6. Assessments (The actual ticks/marks)
+    ws_assessments = wb.create_sheet("Assessments_Log")
+    ws_assessments.append(["Record ID", "Student ID", "Student Name", "Skill ID", "Practical ID", "Teacher ID", "Date Signed"])
+    for a in Assessment.query.all():
+        student = Student.query.get(a.student_id)
+        student_name = f"{student.last_name}, {student.first_name}" if student else "Unknown"
+        date_str = a.date_signed.strftime('%d/%m/%Y %H:%M') if a.date_signed else ""
+        ws_assessments.append([a.id, a.student_id, student_name, a.skill_id, a.practical_id, a.teacher_id, date_str])
+
+    # Save to an in-memory buffer so we don't clog up the server's hard drive
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+    
+    # Send the file to the browser
+    filename = f"Tiffin_CPAC_Database_Export_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        out, 
+        as_attachment=True, 
+        download_name=filename, 
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # --- SEEDING ---
 def seed_database():
