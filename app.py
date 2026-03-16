@@ -1,18 +1,16 @@
 import os, json, io
 from datetime import datetime
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import Workbook
-from dotenv import load_dotenv # <-- NEW: Import dotenv
+from dotenv import load_dotenv
 
-# <-- NEW: Load the .env file immediately
 load_dotenv() 
 
 app = Flask(__name__)
-
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-dev-key-only')
 
 # --- DATABASE CONFIGURATION ---
@@ -20,13 +18,11 @@ env = os.environ.get('FLASK_ENV', 'development').lower()
 custom_db_url = os.environ.get('DATABASE_URL')
 
 if custom_db_url:
-    # In production, it reads the secure absolute path from the .env file
     app.config['SQLALCHEMY_DATABASE_URI'] = custom_db_url
 elif env == 'production':
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prod_tiffin_cpac.db'
 else:
-    # Local development database
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tiffin_cpac.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dev_tiffin_cpac.db'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -288,7 +284,6 @@ def delete_practical(id):
     flash('Practical deleted.', 'success')
     return redirect(url_for('curriculum_management'))
 
-# --- TEACHER MANAGEMENT ROUTES ---
 @app.route('/teacher/add', methods=['POST'])
 @teacher_required
 def add_teacher():
@@ -399,44 +394,57 @@ def delete_students(id):
         flash(f'Deleted {len(student_ids)} student(s).', 'success')
     return redirect(url_for('cohort_view', id=id))
 
-@app.route('/cohort/<int:cohort_id>/practical/<int:prac_id>/attendance', methods=['GET', 'POST'])
+# --- NEW BULK MARK & API ROUTES ---
+@app.route('/cohort/<int:cohort_id>/practical/<int:prac_id>/bulk_mark')
 @teacher_required
-def bulk_attendance(cohort_id, prac_id):
+def bulk_mark(cohort_id, prac_id):
     cohort = Cohort.query.get_or_404(cohort_id)
     practical = Practical.query.get_or_404(prac_id)
     
-    if request.method == 'POST':
-        for student in cohort.students:
-            is_present = request.form.get(f'present_{student.id}') == 'on'
-            att_record = Attendance.query.filter_by(student_id=student.id, practical_id=practical.id).first()
-            
-            if is_present and not att_record:
-                db.session.add(Attendance(student_id=student.id, practical_id=practical.id, teacher_id=current_user.id, is_present=True))
-            elif is_present and att_record and not att_record.is_present:
-                att_record.is_present = True
-                att_record.teacher_id = current_user.id
-                att_record.timestamp = datetime.utcnow()
-            elif not is_present and att_record and att_record.is_present:
-                att_record.is_present = False
-                att_record.teacher_id = current_user.id
-                att_record.timestamp = datetime.utcnow()
-                
-        db.session.commit()
-        flash(f'Bulk attendance updated successfully for {practical.name}.', 'success')
-        return redirect(url_for('cohort_view', id=cohort_id))
-        
+    # Pre-fetch all data to pass to the template cleanly
     attendances = Attendance.query.filter(Attendance.student_id.in_([s.id for s in cohort.students]), Attendance.practical_id == practical.id).all()
-    att_dict = {a.student_id: a for a in attendances}
+    att_dict = {a.student_id: a.is_present for a in attendances}
     
-    signatures = {}
-    for a in attendances:
-        if a.is_present:
-            t = Teacher.query.get(a.teacher_id)
-            signatures[a.student_id] = f"{t.title} {t.first_name[0]} {t.last_name} ({a.timestamp.strftime('%d/%m/%Y')})"
+    assessments = Assessment.query.filter(Assessment.student_id.in_([s.id for s in cohort.students]), Assessment.practical_id == practical.id).all()
+    # Create a nested dict: { student_id: [skill_id_1, skill_id_2] }
+    assessed_dict = {s.id: [] for s in cohort.students}
+    for a in assessments:
+        assessed_dict[a.student_id].append(a.skill_id)
             
     sorted_students = sorted(cohort.students, key=lambda s: s.last_name)
-    return render_template('practical_attendance.html', cohort=cohort, practical=practical, students=sorted_students, att_dict=att_dict, signatures=signatures)
+    return render_template('bulk_mark.html', cohort=cohort, practical=practical, students=sorted_students, skills=practical.skills, att_dict=att_dict, assessed_dict=assessed_dict)
 
+@app.route('/api/update_mark', methods=['POST'])
+@teacher_required
+def api_update_mark():
+    """Handles silent background saves from the Bulk Mark page"""
+    data = request.get_json()
+    student_ids = data.get('student_ids', [])
+    prac_id = data.get('prac_id')
+    mark_type = data.get('type') # 'attendance' or 'skill'
+    skill_id = data.get('skill_id') # required if type == 'skill'
+    is_achieved = data.get('value') # boolean True/False
+
+    for sid in student_ids:
+        if mark_type == 'attendance':
+            att = Attendance.query.filter_by(student_id=sid, practical_id=prac_id).first()
+            if is_achieved and not att:
+                db.session.add(Attendance(student_id=sid, practical_id=prac_id, teacher_id=current_user.id, is_present=True))
+            elif att:
+                att.is_present = is_achieved
+                att.teacher_id = current_user.id
+                att.timestamp = datetime.utcnow()
+        elif mark_type == 'skill':
+            ass = Assessment.query.filter_by(student_id=sid, practical_id=prac_id, skill_id=skill_id).first()
+            if is_achieved and not ass:
+                db.session.add(Assessment(student_id=sid, practical_id=prac_id, skill_id=skill_id, teacher_id=current_user.id))
+            elif not is_achieved and ass:
+                db.session.delete(ass)
+                
+    db.session.commit()
+    return jsonify({'success': True})
+
+# --- INDIVIDUAL STUDENT VIEWS ---
 @app.route('/student/<int:id>')
 @login_required
 def student_view(id):
@@ -563,49 +571,47 @@ def export_data():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-# --- SEEDING ---
+# --- SEEDING & STARTUP ---
 def seed_database():
-    with app.app_context():
-        db.create_all()
-        if not Teacher.query.first():
-            teachers = [
-                ("Mrs", "Ann", "Noble", "ANoble@tiffin.kingston.sch.uk"),
-                ("Mr", "Kurt", "Braganza", "KBraganza@tiffin.kingston.sch.uk"),
-                ("Dr", "Matteo", "Bocchi", "MBocchi@tiffin.kingston.sch.uk"),
-                ("Dr", "Payal", "Tyagi", "PTyagi@tiffin.kingston.sch.uk"),
-                ("Mr", "Tom", "Wightwick", "TWightwick@tiffin.kingston.sch.uk"),
-                ("Mr", "Dhaval", "Pandey", "6060@tiffin.kingston.sch.uk")
-            ]
-            for t, f, l, e in teachers:
-                db.session.add(Teacher(title=t, first_name=f, last_name=l, email=e.lower(), password=None))
-            db.session.commit()
+    if not Teacher.query.first():
+        teachers = [
+            ("Mrs", "Ann", "Noble", "ANoble@tiffin.kingston.sch.uk"),
+            ("Mr", "Kurt", "Braganza", "KBraganza@tiffin.kingston.sch.uk"),
+            ("Dr", "Matteo", "Bocchi", "MBocchi@tiffin.kingston.sch.uk"),
+            ("Dr", "Payal", "Tyagi", "PTyagi@tiffin.kingston.sch.uk"),
+            ("Mr", "Tom", "Wightwick", "TWightwick@tiffin.kingston.sch.uk"),
+            ("Mr", "Dhaval", "Pandey", "6060@tiffin.kingston.sch.uk")
+        ]
+        for t, f, l, e in teachers:
+            db.session.add(Teacher(title=t, first_name=f, last_name=l, email=e.lower(), password=None))
+        db.session.commit()
 
-        if not Skill.query.first():
-            skill_definitions = {
-                '1a': "Correctly follows written instructions...", '2a': "Correctly uses appropriate instrumentation...", '2b': "Carries out techniques methodically...",
-                '2c': "Identifies and controls significant quantitative variables...", '2d': "Selects appropriate equipment...", '3a': "Identifies hazards and assesses risks...",
-                '3b': "Uses appropriate safety equipment...", '4a': "Makes accurate observations...", '4b': "Obtains accurate data and records methodically...",
-                '5a': "Uses appropriate software to process data...", '5b': "Cites sources of information..."
-            }
-            skill_objs = {k: Skill(name=k, description=v) for k, v in skill_definitions.items()}
-            for s in skill_objs.values(): db.session.add(s)
-            db.session.commit()
+    if not Skill.query.first():
+        skill_definitions = {
+            '1a': "Correctly follows written instructions...", '2a': "Correctly uses appropriate instrumentation...", '2b': "Carries out techniques methodically...",
+            '2c': "Identifies and controls significant quantitative variables...", '2d': "Selects appropriate equipment...", '3a': "Identifies hazards and assesses risks...",
+            '3b': "Uses appropriate safety equipment...", '4a': "Makes accurate observations...", '4b': "Obtains accurate data and records methodically...",
+            '5a': "Uses appropriate software to process data...", '5b': "Cites sources of information..."
+        }
+        skill_objs = {k: Skill(name=k, description=v) for k, v in skill_definitions.items()}
+        for s in skill_objs.values(): db.session.add(s)
+        db.session.commit()
 
-            practical_mappings = [
-                ("1. Stationary Waves", ['1a', '2c', '3a', '3b', '4a', '4b']), ("2.a Young's slit", ['2a', '2b', '3a', '3b', '4a', '4b']),
-                ("2.b Diffraction Gratings", ['2a', '2b', '2c', '2d', '4a', '4b']), ("3. Determination of g", ['1a', '2a', '2d', '4b', '5a', '5b']),
-                ("4. Young modulus", ['1a', '2c', '2d', '3b', '4a', '5a', '5b']), ("5. Resistivity of a wire", ['2a', '2c', '3b', '4a', '5a', '5b']),
-                ("6. emf", ['2a', '2c', '3b', '4a', '5a', '5b']), ("7.a SHM - Simple Pendulum", ['1a', '2a', '2b', '4b', '5a', '5b']),
-                ("7.b SHM - Mass spring", ['1a', '2a', '2b', '4b']), ("8.a Boyle's Law", ['1a', '2b', '2c', '2d', '3a', '4b']),
-                ("8b Charles' Law", ['1a', '2c', '3a', '3b', '4a', '5a', '5b']), ("9.a Capacitor Discharging", ['1a', '2c', '2d', '3a', '3b', '4a']),
-                ("9.b Capacitor Charging", ['1a', '3b', '4a', '4b']), ("10. Motor Effect", ['2b', '2d', '3a', '3b', '4a', '4b']),
-                ("11. Search Coils", ['1a', '2a', '2c', '2d', '4b']), ("12. Gamma Radiation", ['1a', '2b', '2d', '3a', '3b', '4a', '4b'])
-            ]
-            for p_name, s_keys in practical_mappings:
-                p = Practical(name=p_name)
-                for sk in s_keys: p.skills.append(skill_objs[sk])
-                db.session.add(p)
-            db.session.commit()
+        practical_mappings = [
+            ("1. Stationary Waves", ['1a', '2c', '3a', '3b', '4a', '4b']), ("2.a Young's slit", ['2a', '2b', '3a', '3b', '4a', '4b']),
+            ("2.b Diffraction Gratings", ['2a', '2b', '2c', '2d', '4a', '4b']), ("3. Determination of g", ['1a', '2a', '2d', '4b', '5a', '5b']),
+            ("4. Young modulus", ['1a', '2c', '2d', '3b', '4a', '5a', '5b']), ("5. Resistivity of a wire", ['2a', '2c', '3b', '4a', '5a', '5b']),
+            ("6. emf", ['2a', '2c', '3b', '4a', '5a', '5b']), ("7.a SHM - Simple Pendulum", ['1a', '2a', '2b', '4b', '5a', '5b']),
+            ("7.b SHM - Mass spring", ['1a', '2a', '2b', '4b']), ("8.a Boyle's Law", ['1a', '2b', '2c', '2d', '3a', '4b']),
+            ("8b Charles' Law", ['1a', '2c', '3a', '3b', '4a', '5a', '5b']), ("9.a Capacitor Discharging", ['1a', '2c', '2d', '3a', '3b', '4a']),
+            ("9.b Capacitor Charging", ['1a', '3b', '4a', '4b']), ("10. Motor Effect", ['2b', '2d', '3a', '3b', '4a', '4b']),
+            ("11. Search Coils", ['1a', '2a', '2c', '2d', '4b']), ("12. Gamma Radiation", ['1a', '2b', '2d', '3a', '3b', '4a', '4b'])
+        ]
+        for p_name, s_keys in practical_mappings:
+            p = Practical(name=p_name)
+            for sk in s_keys: p.skills.append(skill_objs[sk])
+            db.session.add(p)
+        db.session.commit()
 
 with app.app_context():
     db.create_all()

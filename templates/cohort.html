@@ -303,85 +303,88 @@
 </div>
 
 <script>
-	const matrix = {{ matrix | safe }};
-	const students = {{ students_json | safe }};
-	const thead = document.getElementById('tableHead');
-	const tbody = document.getElementById('tableBody');
-	const cohort_id = {{ cohort.id }};
+		const matrix = {{ matrix | safe }};
+		const students = {{ students_json | safe }};
+		const thead = document.getElementById('tableHead');
+		const tbody = document.getElementById('tableBody');
+		const cohort_id = {{ cohort.id }};
 
-	let topRow = `<tr><th class="pinned-col" style="display:flex; gap:0.5rem; align-items:center;"><input type="checkbox" id="selectAll" style="width:auto;margin:0;"> Student Name</th><th>Total Ticks</th><th>Status</th>`;
-	let subRow = `<tr id="subHeaders"><th class="pinned-col"></th><th></th><th></th>`;
+		let topRow = `<tr><th class="pinned-col" style="display:flex; gap:0.5rem; align-items:center;"><input type="checkbox" id="selectAll" style="width:auto;margin:0;"> Student Name</th><th>Total Ticks</th><th>Status</th>`;
+		let subRow = `<tr id="subHeaders"><th class="pinned-col"></th><th></th><th></th>`;
 
 	matrix.forEach(p => {
-	    topRow += `<th colspan="${p.skills.length}"><a href="/cohort/${cohort_id}/practical/${p.id}/attendance" class="prac-header-link" title="Mark Bulk Attendance">${p.name}</a></th>`;
-	    p.skills.forEach(sk => subRow += `<th>${sk}</th>`);
-	});
-	topRow += `</tr>`; subRow += `</tr>`;
-	thead.innerHTML = topRow + subRow;
-
-	function renderTable() {
-	    let term = document.getElementById('searchInput').value.toLowerCase();
-	    let sortMode = document.getElementById('sortSelect').value;
-	    let showFailing = document.getElementById('failFilter').checked;
-
-	    let filtered = students.filter(s => {
-	        let matchName = s.first_name.toLowerCase().includes(term) || s.last_name.toLowerCase().includes(term);
-	        return matchName && (showFailing ? s.status === 'Fail' : true);
+	        // Notice the href now points to /bulk_mark instead of /attendance
+	        topRow += `<th colspan="${p.skills.length}">
+	            <a href="/cohort/${cohort_id}/practical/${p.id}/bulk_mark" class="prac-header-link" title="Open Bulk Mark Grid">${p.name}</a>
+	        </th>`;
+	        p.skills.forEach(sk => subRow += `<th>${sk}</th>`);
 	    });
+		topRow += `</tr>`; subRow += `</tr>`;
+		thead.innerHTML = topRow + subRow;
 
-	    filtered.sort((a, b) => {
-	        if (sortMode === 'name_asc') return a.last_name.localeCompare(b.last_name);
-	        if (sortMode === 'ticks_desc') return b.total_ticks - a.total_ticks;
-	        if (sortMode === 'ticks_asc') return a.total_ticks - b.total_ticks;
-	    });
+		function renderTable() {
+		    let term = document.getElementById('searchInput').value.toLowerCase();
+		    let sortMode = document.getElementById('sortSelect').value;
+		    let showFailing = document.getElementById('failFilter').checked;
 
-	    let tbodyHtml = '';
-	    filtered.forEach(s => {
-	        let rowHtml = `<tr class="student-row">
-	            <td class="pinned-col student-name-cell" style="display:flex; gap:0.5rem; align-items:center;">
-	                <input type="checkbox" name="student_ids" value="${s.id}" class="student-cb" style="width:auto;margin:0;" onclick="event.stopPropagation(); toggleDeleteBtn();">
-	                <span onclick="window.location.href='/student/${s.id}'" style="width:100%; height:100%; display:block;">${s.last_name}, ${s.first_name}</span>
-	            </td>
-	            <td>${s.total_ticks}</td>
-	            <td style="color:${s.status==='Fail'?'#dc3545':'#198754'}; font-weight:bold;">${s.status}</td>`;
+		    let filtered = students.filter(s => {
+		        let matchName = s.first_name.toLowerCase().includes(term) || s.last_name.toLowerCase().includes(term);
+		        return matchName && (showFailing ? s.status === 'Fail' : true);
+		    });
 
-	        matrix.forEach(p => {
-	            p.skills.forEach(sk => {
-	                let checked = s.assessed_cells[p.id] && s.assessed_cells[p.id][sk];
-	                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${checked ? '✓' : ''}</td>`;
-	            });
-	        });
-	        rowHtml += `</tr>`;
-	        tbodyHtml += rowHtml;
-	    });
-	    tbody.innerHTML = tbodyHtml;
-	}
+		    filtered.sort((a, b) => {
+		        if (sortMode === 'name_asc') return a.last_name.localeCompare(b.last_name);
+		        if (sortMode === 'ticks_desc') return b.total_ticks - a.total_ticks;
+		        if (sortMode === 'ticks_asc') return a.total_ticks - b.total_ticks;
+		    });
 
-	['keyup','change'].forEach(evt => {
-	    document.getElementById('searchInput').addEventListener(evt, renderTable);
-	    document.getElementById('sortSelect').addEventListener(evt, renderTable);
-	    document.getElementById('failFilter').addEventListener(evt, renderTable);
-	});
+		    let tbodyHtml = '';
+		    filtered.forEach(s => {
+		        let rowHtml = `<tr class="student-row">
+		            <td class="pinned-col student-name-cell" style="display:flex; gap:0.5rem; align-items:center;">
+		                <input type="checkbox" name="student_ids" value="${s.id}" class="student-cb" style="width:auto;margin:0;" onclick="event.stopPropagation(); toggleDeleteBtn();">
+		                <span onclick="window.location.href='/student/${s.id}'" style="width:100%; height:100%; display:block;">${s.last_name}, ${s.first_name}</span>
+		            </td>
+		            <td>${s.total_ticks}</td>
+		            <td style="color:${s.status==='Fail'?'#dc3545':'#198754'}; font-weight:bold;">${s.status}</td>`;
 
-	document.getElementById('selectAll').addEventListener('change', function(e) {
-	    document.querySelectorAll('.student-cb').forEach(cb => cb.checked = e.target.checked);
-	    toggleDeleteBtn();
-	});
+		        matrix.forEach(p => {
+		            p.skills.forEach(sk => {
+		                let checked = s.assessed_cells[p.id] && s.assessed_cells[p.id][sk];
+		                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${checked ? '✓' : ''}</td>`;
+		            });
+		        });
+		        rowHtml += `</tr>`;
+		        tbodyHtml += rowHtml;
+		    });
+		    tbody.innerHTML = tbodyHtml;
+		}
 
-	function toggleDeleteBtn() {
-	    const checked = document.querySelectorAll('.student-cb:checked').length;
-	    document.getElementById('deleteBtn').style.display = checked > 0 ? 'block' : 'none';
-	}
+		['keyup','change'].forEach(evt => {
+		    document.getElementById('searchInput').addEventListener(evt, renderTable);
+		    document.getElementById('sortSelect').addEventListener(evt, renderTable);
+		    document.getElementById('failFilter').addEventListener(evt, renderTable);
+		});
 
-	tbody.addEventListener('mouseover', e => {
-	    let td = e.target.closest('td.prac-cell');
-	    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.add('prac-hover-highlight'));
-	});
-	tbody.addEventListener('mouseout', e => {
-	    let td = e.target.closest('td.prac-cell');
-	    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.remove('prac-hover-highlight'));
-	});
+		document.getElementById('selectAll').addEventListener('change', function(e) {
+		    document.querySelectorAll('.student-cb').forEach(cb => cb.checked = e.target.checked);
+		    toggleDeleteBtn();
+		});
 
-	renderTable();
+		function toggleDeleteBtn() {
+		    const checked = document.querySelectorAll('.student-cb:checked').length;
+		    document.getElementById('deleteBtn').style.display = checked > 0 ? 'block' : 'none';
+		}
+
+		tbody.addEventListener('mouseover', e => {
+		    let td = e.target.closest('td.prac-cell');
+		    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.add('prac-hover-highlight'));
+		});
+		tbody.addEventListener('mouseout', e => {
+		    let td = e.target.closest('td.prac-cell');
+		    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.remove('prac-hover-highlight'));
+		});
+
+		renderTable();
 </script>
 {% endblock %}

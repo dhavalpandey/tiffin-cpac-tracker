@@ -1,0 +1,387 @@
+{% extends 'base.html' %} {% block content %}
+<style>
+	.controls {
+		display: flex;
+		gap: 1rem;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		flex-wrap: wrap;
+		background: white;
+		padding: 1rem;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+	}
+	.table-container {
+		overflow-x: auto;
+		max-height: 70vh;
+		background: white;
+		border-radius: 8px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+		position: relative;
+	}
+	table {
+		border-collapse: separate;
+		border-spacing: 0;
+		white-space: nowrap;
+		width: 100%;
+		user-select: none;
+	} /* user-select none prevents accidental text highlighting when clicking fast */
+	th,
+	td {
+		padding: 0.6rem;
+		border-bottom: 1px solid var(--border);
+		border-right: 1px solid var(--border);
+		text-align: center;
+		font-size: 0.95rem;
+	}
+
+	/* Sticky Headers */
+	th {
+		background: #f8f9fa;
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		border-top: 1px solid var(--border);
+	}
+	.pinned-col {
+		position: sticky;
+		left: 0;
+		background: white;
+		z-index: 15;
+		text-align: left;
+		font-weight: 600;
+		border-right: 2px solid var(--border);
+	}
+	th.pinned-col {
+		z-index: 20;
+		background: #e9ecef;
+	}
+
+	/* Interactive Cells */
+	.interactive-cell {
+		cursor: pointer;
+		transition: background-color 0.1s ease;
+		font-weight: bold;
+		width: 80px;
+	}
+	.interactive-cell:hover {
+		background-color: #eef3fc;
+	}
+
+	/* Cell States */
+	.cell-true {
+		background-color: #d1e7dd !important;
+		color: #0f5132;
+	}
+	.cell-false {
+		background-color: transparent;
+		color: #dc3545;
+	}
+	.cell-attendance.cell-true {
+		background-color: #cff4fc !important;
+		color: #055160;
+	}
+
+	/* Header toggles */
+	.header-toggle {
+		cursor: pointer;
+		font-size: 0.8rem;
+		display: block;
+		margin-top: 0.3rem;
+		color: var(--primary);
+		font-weight: normal;
+	}
+	.header-toggle:hover {
+		text-decoration: underline;
+	}
+
+	/* Saving Toast */
+	#saveToast {
+		position: fixed;
+		top: 20px;
+		right: 20px;
+		background: #333;
+		color: white;
+		padding: 0.75rem 1.5rem;
+		border-radius: 6px;
+		display: none;
+		z-index: 9999;
+		font-weight: 500;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		transition: opacity 0.3s;
+	}
+</style>
+
+<div id="saveToast">Saving...</div>
+
+<div
+	style="
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+	">
+	<div>
+		<h2 style="margin: 0; margin-bottom: 0.3rem">
+			Bulk Mark: {{ practical.name }}
+		</h2>
+		<p style="margin: 0; color: #6c757d; font-size: 0.95rem">
+			Cohort: {{ cohort.start_year }} - {{ cohort.end_year }}
+			&nbsp;|&nbsp; Click any cell to toggle the mark instantly.
+		</p>
+	</div>
+	<a href="{{ url_for('cohort_view', id=cohort.id) }}" class="btn btn-outline"
+		>&larr; Back to Cohort</a
+	>
+</div>
+
+<div class="controls">
+	<input
+		type="text"
+		id="searchInput"
+		placeholder="Search students..."
+		style="width: 250px; margin: 0"
+		onkeyup="filterTable()" />
+
+	<select
+		id="attendanceFilter"
+		style="width: 200px; margin: 0"
+		onchange="filterTable()">
+		<option value="all">Show All Students</option>
+		<option value="present">Present Only</option>
+		<option value="absent">Absent Only</option>
+	</select>
+
+	<button
+		class="btn btn-outline"
+		style="padding: 0.5rem 1rem; margin: 0"
+		onclick="sortAlphabetically()">
+		Sort A-Z
+	</button>
+</div>
+
+<div class="table-container">
+	<table id="markTable">
+		<thead>
+			<tr>
+				<th class="pinned-col">Student Name</th>
+
+				<th style="background-color: #e0f0ff">
+					Present?
+					<span
+						class="header-toggle"
+						onclick="toggleColumn('attendance', null, true)"
+						>All ✓</span
+					>
+					<span
+						class="header-toggle"
+						onclick="toggleColumn('attendance', null, false)"
+						style="color: #dc3545"
+						>None ✗</span
+					>
+				</th>
+
+				{% for sk in skills %}
+				<th>
+					{{ sk.name }}
+					<span
+						class="header-toggle"
+						onclick="toggleColumn('skill', {{ sk.id }}, true)"
+						>All ✓</span
+					>
+					<span
+						class="header-toggle"
+						onclick="toggleColumn('skill', {{ sk.id }}, false)"
+						style="color: #dc3545"
+						>None ✗</span
+					>
+				</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody id="tableBody">
+			{% for student in students %}
+			<tr
+				class="student-row"
+				data-name="{{ student.last_name | lower }}, {{ student.first_name | lower }}">
+				<td class="pinned-col">
+					{{ student.last_name }}, {{ student.first_name }}
+				</td>
+
+				{% set is_present = att_dict.get(student.id, False) %}
+				<td
+					class="interactive-cell cell-attendance {% if is_present %}cell-true{% else %}cell-false{% endif %}"
+					data-sid="{{ student.id }}"
+					data-type="attendance"
+					data-val="{% if is_present %}true{% else %}false{% endif %}"
+					onclick="toggleCell(this)">
+					{% if is_present %}✅{% else %}❌{% endif %}
+				</td>
+
+				{% set student_skills = assessed_dict.get(student.id, []) %} {%
+				for sk in skills %} {% set has_skill = sk.id in student_skills
+				%}
+				<td
+					class="interactive-cell {% if has_skill %}cell-true{% else %}cell-false{% endif %}"
+					data-sid="{{ student.id }}"
+					data-type="skill"
+					data-skillid="{{ sk.id }}"
+					data-val="{% if has_skill %}true{% else %}false{% endif %}"
+					onclick="toggleCell(this)">
+					{% if has_skill %}✓{% else %}✗{% endif %}
+				</td>
+				{% endfor %}
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>
+
+<script>
+	const pracId = {{ practical.id }};
+	let toastTimeout;
+
+	// Show visual save notification
+	function showToast(message = "Saved") {
+	    const toast = document.getElementById('saveToast');
+	    toast.innerText = message;
+	    toast.style.display = 'block';
+	    toast.style.opacity = '1';
+	    clearTimeout(toastTimeout);
+	    toastTimeout = setTimeout(() => {
+	        toast.style.opacity = '0';
+	        setTimeout(() => toast.style.display = 'none', 300);
+	    }, 1000);
+	}
+
+	// Handles individual cell clicks
+	function toggleCell(cell) {
+	    // 1. Get current state
+	    const isCurrentlyTrue = cell.getAttribute('data-val') === 'true';
+	    const newValue = !isCurrentlyTrue;
+	    const type = cell.getAttribute('data-type');
+
+	    // 2. Optimistic UI Update (Update visual instantly)
+	    cell.setAttribute('data-val', newValue);
+	    if(newValue) {
+	        cell.classList.remove('cell-false');
+	        cell.classList.add('cell-true');
+	        cell.innerText = type === 'attendance' ? '✅' : '✓';
+	    } else {
+	        cell.classList.remove('cell-true');
+	        cell.classList.add('cell-false');
+	        cell.innerText = type === 'attendance' ? '❌' : '✗';
+	    }
+
+	    // 3. Send to Server
+	    sendUpdate([parseInt(cell.getAttribute('data-sid'))], type, cell.getAttribute('data-skillid'), newValue);
+
+	    // 4. If we just changed attendance, re-run filters in case "Present Only" is active
+	    if(type === 'attendance') filterTable();
+	}
+
+	// Handles clicking "All ✓" or "None ✗" in the table headers
+	function toggleColumn(type, skillId, targetValue) {
+	    if(!confirm(`Are you sure you want to mark this column as ${targetValue ? 'Achieved/Present' : 'Not Achieved/Absent'} for ALL visible students?`)) return;
+
+	    const rows = document.querySelectorAll('.student-row');
+	    let studentsToUpdate = [];
+
+	    rows.forEach(row => {
+	        // Only update rows that are not hidden by the search/filter
+	        if (row.style.display !== 'none') {
+	            let cellSelector = type === 'attendance' ? `td[data-type="attendance"]` : `td[data-type="skill"][data-skillid="${skillId}"]`;
+	            let cell = row.querySelector(cellSelector);
+
+	            // Only update if it's not already in the target state
+	            if (cell.getAttribute('data-val') !== targetValue.toString()) {
+	                studentsToUpdate.push(parseInt(cell.getAttribute('data-sid')));
+
+	                // Optimistic visual update
+	                cell.setAttribute('data-val', targetValue);
+	                if(targetValue) {
+	                    cell.classList.remove('cell-false');
+	                    cell.classList.add('cell-true');
+	                    cell.innerText = type === 'attendance' ? '✅' : '✓';
+	                } else {
+	                    cell.classList.remove('cell-true');
+	                    cell.classList.add('cell-false');
+	                    cell.innerText = type === 'attendance' ? '❌' : '✗';
+	                }
+	            }
+	        }
+	    });
+
+	    if (studentsToUpdate.length > 0) {
+	        sendUpdate(studentsToUpdate, type, skillId, targetValue);
+	        if(type === 'attendance') filterTable();
+	    }
+	}
+
+	// The actual fetch request to the backend
+	function sendUpdate(studentIds, type, skillId, value) {
+	    showToast("Saving...");
+
+	    fetch('/api/update_mark', {
+	        method: 'POST',
+	        headers: { 'Content-Type': 'application/json' },
+	        body: JSON.stringify({
+	            student_ids: studentIds,
+	            prac_id: pracId,
+	            type: type,
+	            skill_id: skillId ? parseInt(skillId) : null,
+	            value: value
+	        })
+	    })
+	    .then(response => response.json())
+	    .then(data => {
+	        if(data.success) showToast("Saved");
+	    })
+	    .catch(error => {
+	        console.error('Error:', error);
+	        showToast("⚠️ Error Saving");
+	        // If this was production, you might want to revert the cell color here if it fails
+	    });
+	}
+
+	// Search and Filtering
+	function filterTable() {
+	    const term = document.getElementById('searchInput').value.toLowerCase();
+	    const attFilter = document.getElementById('attendanceFilter').value;
+	    const rows = document.querySelectorAll('.student-row');
+
+	    rows.forEach(row => {
+	        const name = row.getAttribute('data-name');
+	        const attCell = row.querySelector('td[data-type="attendance"]');
+	        const isPresent = attCell.getAttribute('data-val') === 'true';
+
+	        let nameMatches = name.includes(term);
+	        let attMatches = true;
+
+	        if (attFilter === 'present' && !isPresent) attMatches = false;
+	        if (attFilter === 'absent' && isPresent) attMatches = false;
+
+	        row.style.display = (nameMatches && attMatches) ? '' : 'none';
+	    });
+	}
+
+	// DOM Sorting
+	let isAscending = false; // Start false so first click sorts Ascending
+	function sortAlphabetically() {
+	    isAscending = !isAscending;
+	    const tbody = document.getElementById('tableBody');
+	    const rows = Array.from(tbody.querySelectorAll('tr.student-row'));
+
+	    rows.sort((a, b) => {
+	        const nameA = a.getAttribute('data-name');
+	        const nameB = b.getAttribute('data-name');
+	        if (nameA < nameB) return isAscending ? -1 : 1;
+	        if (nameA > nameB) return isAscending ? 1 : -1;
+	        return 0;
+	    });
+
+	    rows.forEach(row => tbody.appendChild(row));
+	}
+</script>
+{% endblock %}
