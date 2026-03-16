@@ -64,6 +64,7 @@ class Skill(db.Model):
 class Practical(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.String(500), nullable=True)
 
 practical_skills = db.Table('practical_skills',
     db.Column('practical_id', db.Integer, db.ForeignKey('practical.id', ondelete="CASCADE"), primary_key=True),
@@ -74,8 +75,8 @@ Practical.skills = db.relationship('Skill', secondary=practical_skills, lazy='su
 class Assessment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete="CASCADE"), nullable=False)
-    skill_id = db.Column(db.Integer, db.ForeignKey('skill.id'), nullable=False)
-    practical_id = db.Column(db.Integer, db.ForeignKey('practical.id'), nullable=False)
+    skill_id = db.Column(db.Integer, db.ForeignKey('skill.id', ondelete="CASCADE"), nullable=False)
+    practical_id = db.Column(db.Integer, db.ForeignKey('practical.id', ondelete="CASCADE"), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
     date_signed = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -161,14 +162,28 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
+# --- MAIN DASHBOARDS ---
 @app.route('/dashboard')
 @teacher_required
 def dashboard():
     cohorts = Cohort.query.order_by(Cohort.end_year.desc()).all()
     cohort_data = [{'id': c.id, 'title': get_cohort_title(c.end_year), 'years': f"{c.start_year}-{c.end_year}", 'student_count': len(c.students)} for c in cohorts]
-    teachers = Teacher.query.all()
-    return render_template('dashboard.html', cohorts=cohort_data, teachers=teachers)
+    return render_template('dashboard.html', cohorts=cohort_data)
 
+@app.route('/teachers')
+@teacher_required
+def teacher_management():
+    teachers = Teacher.query.all()
+    return render_template('teacher_management.html', teachers=teachers)
+
+@app.route('/curriculum')
+@teacher_required
+def curriculum_management():
+    skills = Skill.query.order_by(Skill.name).all()
+    practicals = Practical.query.all()
+    return render_template('curriculum_management.html', skills=skills, practicals=practicals)
+
+# --- COHORT ROUTES ---
 @app.route('/cohort/add', methods=['POST'])
 @teacher_required
 def add_cohort():
@@ -185,6 +200,85 @@ def delete_cohort(id):
     db.session.commit()
     flash('Cohort and all its students deleted successfully.', 'success')
     return redirect(url_for('dashboard'))
+
+# --- DYNAMIC SKILLS & PRACTICALS ROUTES ---
+@app.route('/skill/add', methods=['POST'])
+@teacher_required
+def add_skill():
+    name = request.form.get('name').strip()
+    desc = request.form.get('description').strip()
+    if Skill.query.filter_by(name=name).first():
+        flash('Skill already exists.', 'error')
+    else:
+        db.session.add(Skill(name=name, description=desc))
+        db.session.commit()
+        flash('Skill added.', 'success')
+    return redirect(url_for('curriculum_management'))
+
+@app.route('/skill/edit/<int:id>', methods=['POST'])
+@teacher_required
+def edit_skill(id):
+    skill = Skill.query.get_or_404(id)
+    skill.name = request.form.get('name').strip()
+    skill.description = request.form.get('description').strip()
+    db.session.commit()
+    flash('Skill updated.', 'success')
+    return redirect(url_for('curriculum_management'))
+
+@app.route('/skill/delete/<int:id>', methods=['POST'])
+@teacher_required
+def delete_skill(id):
+    skill = Skill.query.get_or_404(id)
+    Assessment.query.filter_by(skill_id=id).delete()
+    db.session.delete(skill)
+    db.session.commit()
+    flash('Skill deleted.', 'success')
+    return redirect(url_for('curriculum_management'))
+
+@app.route('/practical/add', methods=['POST'])
+@teacher_required
+def add_practical():
+    name = request.form.get('name').strip()
+    description = request.form.get('description', '').strip()
+    skill_ids = request.form.getlist('skills')
+    
+    p = Practical(name=name, description=description)
+    if skill_ids:
+        selected_skills = Skill.query.filter(Skill.id.in_(skill_ids)).all()
+        p.skills.extend(selected_skills)
+        
+    db.session.add(p)
+    db.session.commit()
+    flash('Practical added.', 'success')
+    return redirect(url_for('curriculum_management'))
+
+@app.route('/practical/edit/<int:id>', methods=['POST'])
+@teacher_required
+def edit_practical(id):
+    p = Practical.query.get_or_404(id)
+    p.name = request.form.get('name').strip()
+    p.description = request.form.get('description', '').strip()
+    
+    skill_ids = request.form.getlist('skills')
+    p.skills = []
+    if skill_ids:
+        selected_skills = Skill.query.filter(Skill.id.in_(skill_ids)).all()
+        p.skills.extend(selected_skills)
+        
+    db.session.commit()
+    flash('Practical updated.', 'success')
+    return redirect(url_for('curriculum_management'))
+
+@app.route('/practical/delete/<int:id>', methods=['POST'])
+@teacher_required
+def delete_practical(id):
+    p = Practical.query.get_or_404(id)
+    Assessment.query.filter_by(practical_id=id).delete()
+    Attendance.query.filter_by(practical_id=id).delete()
+    db.session.delete(p)
+    db.session.commit()
+    flash('Practical deleted.', 'success')
+    return redirect(url_for('curriculum_management'))
 
 # --- TEACHER MANAGEMENT ROUTES ---
 @app.route('/teacher/add', methods=['POST'])
@@ -203,7 +297,7 @@ def add_teacher():
         ))
         db.session.commit()
         flash('Teacher added. They can set their password on their first login.', 'success')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('teacher_management'))
 
 @app.route('/teacher/edit/<int:id>', methods=['POST'])
 @teacher_required
@@ -215,19 +309,19 @@ def edit_teacher(id):
         teacher.password = generate_password_hash(new_pass)
     db.session.commit()
     flash(f"Updated details for {teacher.title} {teacher.last_name}.", 'success')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('teacher_management'))
 
 @app.route('/teacher/delete/<int:id>', methods=['POST'])
 @teacher_required
 def delete_teacher(id):
     if current_user.id == id:
         flash("You cannot delete yourself.", "error")
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('teacher_management'))
     teacher = Teacher.query.get_or_404(id)
     db.session.delete(teacher)
     db.session.commit()
     flash("Teacher deleted.", "success")
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('teacher_management'))
 
 # --- COHORT & STUDENT VIEWS ---
 @app.route('/cohort/<int:id>')
@@ -362,7 +456,6 @@ def grade(student_id, prac_id):
     skills = practical.skills
     
     if request.method == 'POST' and current_user.role == 'teacher':
-        # Handle Attendance Logic
         is_present = request.form.get('attendance_present') == 'on'
         att_record = Attendance.query.filter_by(student_id=student.id, practical_id=practical.id).first()
         
@@ -377,7 +470,6 @@ def grade(student_id, prac_id):
             att_record.teacher_id = current_user.id
             att_record.timestamp = datetime.utcnow()
 
-        # Handle Skill Assessment Logic
         for sk in skills:
             achieved = request.form.get(f'skill_{sk.id}') == 'on'
             existing = Assessment.query.filter_by(student_id=student.id, skill_id=sk.id, practical_id=practical.id).first()
@@ -434,9 +526,9 @@ def export_data():
         ws_skills.append([sk.id, sk.name, sk.description])
 
     ws_practicals = wb.create_sheet("Practicals")
-    ws_practicals.append(["ID", "Practical Name"])
+    ws_practicals.append(["ID", "Practical Name", "Description"])
     for p in Practical.query.all():
-        ws_practicals.append([p.id, p.name])
+        ws_practicals.append([p.id, p.name, p.description])
 
     ws_assessments = wb.create_sheet("Assessments_Log")
     ws_assessments.append(["Record ID", "Student ID", "Student Name", "Skill ID", "Practical ID", "Teacher ID", "Date Signed"])

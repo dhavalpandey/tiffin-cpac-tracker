@@ -1,0 +1,183 @@
+{% extends 'base.html' %} {% block content %}
+<style>
+    .data-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04); margin-bottom: 3rem; }
+    .data-table th, .data-table td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .data-table th { background: #f8f9fa; font-weight: 600; color: #495057; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; margin-top: 1rem; }
+    
+    select[multiple] { height: 150px; padding: 0.5rem; background: #fff; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; }
+    select[multiple] option { padding: 0.5rem; border-radius: 4px; margin-bottom: 2px; }
+    select[multiple] option:checked { background: var(--primary); color: white; }
+</style>
+
+<div class="section-header">
+    <h2 style="margin: 0">Examined Skills</h2>
+    <button class="btn" onclick="document.getElementById('addSkillModal').style.display = 'flex'">+ Add Skill</button>
+</div>
+
+<table class="data-table">
+    <tr>
+        <th style="width: 15%">Skill Name</th>
+        <th>Description</th>
+        <th style="text-align: right; width: 20%">Actions</th>
+    </tr>
+    {% for sk in skills %}
+    <tr>
+        <td style="font-weight: bold;">{{ sk.name }}</td>
+        <td>{{ sk.description }}</td>
+        <td style="text-align: right">
+            <button class="btn btn-outline" style="padding: 0.3rem 0.7rem" onclick="openEditSkill({{ sk.id }}, '{{ sk.name|replace("'", "\\'") }}', '{{ sk.description|replace("'", "\\'") }}')">Edit</button>
+            <form method="POST" action="{{ url_for('delete_skill', id=sk.id) }}" style="display: inline" onsubmit="return confirm('WARNING: Deleting this skill will remove all associated student marks for this specific skill. Continue?');">
+                <button type="submit" class="btn btn-danger" style="padding: 0.3rem 0.7rem">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<div class="section-header">
+    <h2 style="margin: 0">Practical List</h2>
+    <button class="btn" onclick="document.getElementById('addPracticalModal').style.display = 'flex'">+ Add Practical</button>
+</div>
+
+<table class="data-table">
+    <tr>
+        <th style="width: 25%">Practical Name</th>
+        <th>Assessed Skills</th>
+        <th style="text-align: right; width: 20%">Actions</th>
+    </tr>
+    {% for p in practicals %}
+    <tr>
+        <td>
+            <strong style="display: block; margin-bottom: 0.3rem;">{{ p.name }}</strong>
+            <span style="font-size: 0.85rem; color: #6c757d;">{{ p.description or '' }}</span>
+        </td>
+        <td>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                {% for s in p.skills %}
+                <span style="background: #eef3fc; color: var(--primary); padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.85rem; font-weight: 500; border: 1px solid #c6d8f9;">
+                    {{ s.name }}
+                </span>
+                {% endfor %}
+            </div>
+        </td>
+        <td style="text-align: right">
+            <button class="btn btn-outline" style="padding: 0.3rem 0.7rem" onclick="openEditPractical({{ p.id }}, '{{ p.name|replace("'", "\\'") }}', '{{ p.description|default('', true)|replace("'", "\\'") }}', [{% for s in p.skills %}{{ s.id }}{% if not loop.last %},{% endif %}{% endfor %}])">Edit</button>
+            <form method="POST" action="{{ url_for('delete_practical', id=p.id) }}" style="display: inline" onsubmit="return confirm('WARNING: Deleting this practical will remove all associated grading and attendance records permanently. Continue?');">
+                <button type="submit" class="btn btn-danger" style="padding: 0.3rem 0.7rem">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<div id="addSkillModal" class="modal">
+    <div class="modal-content" style="width: 450px">
+        <h3 style="margin-top: 0">Add Examined Skill</h3>
+        <form method="POST" action="{{ url_for('add_skill') }}">
+            <label>Skill Name (e.g. 1a, 2b)</label>
+            <input type="text" name="name" required />
+            <label>Description</label>
+            <input type="text" name="description" required />
+            <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('addSkillModal').style.display = 'none'">Cancel</button>
+                <button type="submit" class="btn">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="editSkillModal" class="modal">
+    <div class="modal-content" style="width: 450px">
+        <h3 style="margin-top: 0">Edit Examined Skill</h3>
+        <form method="POST" id="editSkillForm">
+            <label>Skill Name</label>
+            <input type="text" name="name" id="editSkillName" required />
+            <label>Description</label>
+            <input type="text" name="description" id="editSkillDesc" required />
+            <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('editSkillModal').style.display = 'none'">Cancel</button>
+                <button type="submit" class="btn">Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="addPracticalModal" class="modal">
+    <div class="modal-content" style="width: 500px">
+        <h3 style="margin-top: 0">Add Practical</h3>
+        <form method="POST" action="{{ url_for('add_practical') }}">
+            <label>Practical Name</label>
+            <input type="text" name="name" required />
+            <label>Description (Optional)</label>
+            <input type="text" name="description" />
+            
+            <label style="margin-top: 1rem;">Which skills does this practical assess?</label>
+            <p style="font-size: 0.85rem; color: #6c757d; margin-top: 0;">Hold Ctrl (Windows) or Cmd (Mac) to select multiple.</p>
+            <select name="skills" multiple required style="width: 100%;">
+                {% for sk in skills %}
+                <option value="{{ sk.id }}">{{ sk.name }} - {{ sk.description[:40] }}...</option>
+                {% endfor %}
+            </select>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('addPracticalModal').style.display = 'none'">Cancel</button>
+                <button type="submit" class="btn">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="editPracticalModal" class="modal">
+    <div class="modal-content" style="width: 500px">
+        <h3 style="margin-top: 0">Edit Practical</h3>
+        <form method="POST" id="editPracticalForm">
+            <label>Practical Name</label>
+            <input type="text" name="name" id="editPracName" required />
+            <label>Description (Optional)</label>
+            <input type="text" name="description" id="editPracDesc" />
+            
+            <label style="margin-top: 1rem;">Which skills does this practical assess?</label>
+            <p style="font-size: 0.85rem; color: #6c757d; margin-top: 0;">Hold Ctrl (Windows) or Cmd (Mac) to select multiple.</p>
+            <select name="skills" id="editPracSkills" multiple required style="width: 100%;">
+                {% for sk in skills %}
+                <option value="{{ sk.id }}">{{ sk.name }} - {{ sk.description[:40] }}...</option>
+                {% endfor %}
+            </select>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('editPracticalModal').style.display = 'none'">Cancel</button>
+                <button type="submit" class="btn">Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openEditSkill(id, name, desc) {
+        document.getElementById("editSkillName").value = name;
+        document.getElementById("editSkillDesc").value = desc;
+        document.getElementById("editSkillForm").action = "/skill/edit/" + id;
+        document.getElementById("editSkillModal").style.display = "flex";
+    }
+
+    function openEditPractical(id, name, desc, skillIds) {
+        document.getElementById("editPracName").value = name;
+        document.getElementById("editPracDesc").value = desc;
+        document.getElementById("editPracticalForm").action = "/practical/edit/" + id;
+        
+        let select = document.getElementById("editPracSkills");
+        // Clear all selections first
+        for(let i=0; i<select.options.length; i++) {
+            select.options[i].selected = false;
+        }
+        // Apply new selections
+        for(let i=0; i<select.options.length; i++) {
+            if(skillIds.includes(parseInt(select.options[i].value))) {
+                select.options[i].selected = true;
+            }
+        }
+        document.getElementById("editPracticalModal").style.display = "flex";
+    }
+</script>
+{% endblock %}

@@ -49,6 +49,26 @@
 			.navbar-brand:hover {
 				color: var(--primary);
 			}
+
+			.nav-menu {
+				display: flex;
+				gap: 1.5rem;
+				align-items: center;
+				margin-right: 1.5rem;
+				padding-right: 1.5rem;
+				border-right: 1px solid var(--border);
+			}
+			.nav-link {
+				text-decoration: none;
+				color: #495057;
+				font-weight: 500;
+				font-size: 0.95rem;
+				transition: color 0.2s;
+			}
+			.nav-link:hover {
+				color: var(--primary);
+			}
+
 			.user-name {
 				font-weight: 500;
 				font-size: 1.05rem;
@@ -184,6 +204,21 @@
 			<div style="display: flex; align-items: center">
 				{% if current_user.is_authenticated %} {% if current_user.role
 				== 'teacher' %}
+				<div class="nav-menu">
+					<a href="{{ url_for('dashboard') }}" class="nav-link"
+						>Student Management</a
+					>
+					<a
+						href="{{ url_for('curriculum_management') }}"
+						class="nav-link"
+						>Curriculum</a
+					>
+					<a
+						href="{{ url_for('teacher_management') }}"
+						class="nav-link"
+						>Staff Admin</a
+					>
+				</div>
 				<span class="user-name"
 					>{{ current_user.title }} {{ current_user.last_name }}</span
 				>
