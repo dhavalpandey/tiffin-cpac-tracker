@@ -20,7 +20,7 @@ custom_db_url = os.environ.get('DATABASE_URL')
 if custom_db_url:
     app.config['SQLALCHEMY_DATABASE_URI'] = custom_db_url
 elif env == 'production':
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prod_tiffin_cpac.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///production_tiffin_cpac.db'
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dev_tiffin_cpac.db'
 
