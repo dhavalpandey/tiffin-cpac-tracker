@@ -8,9 +8,28 @@
 		max-width: 800px;
 		margin: 0 auto;
 	">
-	<h2 style="margin-top: 0">
+	<h2 style="margin-top: 0; margin-bottom: 0.3rem">
 		{{ student.last_name }}, {{ student.first_name }}
 	</h2>
+	<p
+		style="
+			margin-top: 0;
+			color: #6c757d;
+			font-size: 1.1rem;
+			margin-bottom: 2rem;
+		">
+		Class:
+		<strong
+			>{{ student.y13_class if is_y13 else student.y12_class or
+			"Unassigned" }}</strong
+		>
+		{% if is_y13 and student.y12_class and student.y13_class !=
+		student.y12_class %}
+		<span style="font-size: 0.9rem"
+			>(Year 12: {{ student.y12_class }})</span
+		>
+		{% endif %}
+	</p>
 
 	{% if current_user.role == 'teacher' %}
 	<a
@@ -146,19 +165,6 @@
 			>
 		</div>
 		{% endfor %}
-	</div>
-
-	<div
-		style="
-			background: #f8f9fa;
-			padding: 1.2rem;
-			text-align: right;
-			border-radius: 8px;
-			border: 1px solid var(--border);
-		">
-		<strong style="font-size: 1.1rem"
-			>Total score: {{ total_score }}</strong
-		>
 	</div>
 </div>
 {% endblock %}

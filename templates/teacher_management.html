@@ -82,7 +82,7 @@
 			<button
 				class="btn btn-outline"
 				style="padding: 0.3rem 0.7rem"
-				onclick="openEditTeacher({{ t.id }}, '{{ t.title }}', '{{ t.first_name }} {{ t.last_name }}')">
+				onclick="openEditTeacher({{ t.id }}, '{{ t.title }}', '{{ t.first_name|replace('\'', '\\\'') }}', '{{ t.last_name|replace('\'', '\\\'') }}', '{{ t.email|replace('\'', '\\\'') }}')">
 				Edit
 			</button>
 			{% if current_user.id != t.id %}
@@ -157,7 +157,21 @@
 				<option>Ms</option>
 				<option>Dr</option>
 			</select>
-			<label>Reset Password (Leave blank to keep current)</label>
+			<label>First Name</label>
+			<input type="text" name="first_name" id="editFirstName" required />
+			<label>Surname</label>
+			<input type="text" name="last_name" id="editLastName" required />
+			<label>Email</label>
+			<input type="email" name="email" id="editEmail" required />
+
+			<label
+				style="
+					margin-top: 1rem;
+					border-top: 1px solid var(--border);
+					padding-top: 1rem;
+				"
+				>Reset Password (Leave blank to keep current)</label
+			>
 			<input
 				type="password"
 				name="new_password"
@@ -186,9 +200,12 @@
 </div>
 
 <script>
-	function openEditTeacher(id, title, name) {
-		document.getElementById("editTeacherName").innerText = "Edit " + name;
+	function openEditTeacher(id, title, fname, lname, email) {
+		document.getElementById("editTeacherName").innerText = "Edit Details";
 		document.getElementById("editTitle").value = title;
+		document.getElementById("editFirstName").value = fname;
+		document.getElementById("editLastName").value = lname;
+		document.getElementById("editEmail").value = email;
 		document.getElementById("editTeacherForm").action =
 			"/teacher/edit/" + id;
 		document.getElementById("editTeacherModal").style.display = "flex";

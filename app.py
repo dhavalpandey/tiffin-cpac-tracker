@@ -53,6 +53,11 @@ class Student(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
+    
+    # New Class Tracking Fields
+    y12_class = db.Column(db.String(20), nullable=True)
+    y13_class = db.Column(db.String(20), nullable=True)
+    
     cohort_id = db.Column(db.Integer, db.ForeignKey('cohort.id'), nullable=False)
     assessments = db.relationship('Assessment', backref='student_ref', lazy=True, cascade="all, delete-orphan")
 
@@ -106,7 +111,7 @@ def teacher_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- UTILS ---
+# --- TIME LOGIC & UTILS ---
 def get_academic_end_year():
     now = datetime.utcnow()
     return now.year if now.month < 9 else now.year + 1
@@ -119,6 +124,34 @@ def get_cohort_title(end_year):
         diff = acad_end - end_year
         return "Left last year" if diff == 1 else f"Left {diff} years ago"
     return f"Future (Starts {end_year-2})"
+
+def get_cohort_status(cohort):
+    """Returns True if the cohort has entered Year 13 (After Aug 1st of their second year)"""
+    now = datetime.utcnow()
+    transition_date = datetime(cohort.start_year + 1, 8, 1)
+    return now >= transition_date
+
+def parse_student_line(line, format_type):
+    """Helper to parse bulk student additions"""
+    fname, lname, cname = "", "", ""
+    if format_type == "First, Last, Class":
+        parts = [p.strip() for p in line.split(',')]
+        if len(parts) >= 3: fname, lname, cname = parts[0], parts[1], parts[2]
+        elif len(parts) == 2: fname, lname = parts[0], parts[1]
+    elif format_type == "Last, First, Class":
+        parts = [p.strip() for p in line.split(',')]
+        if len(parts) >= 3: lname, fname, cname = parts[0], parts[1], parts[2]
+        elif len(parts) == 2: lname, fname = parts[0], parts[1]
+    elif format_type == "Last First Class":
+        parts = line.split()
+        if len(parts) >= 3:
+            cname = parts[-1]
+            lname = parts[0]
+            fname = " ".join(parts[1:-1])
+        elif len(parts) == 2:
+            lname = parts[0]
+            fname = parts[1]
+    return fname, lname, cname
 
 # --- ROUTES ---
 @app.route('/')
@@ -307,6 +340,10 @@ def add_teacher():
 def edit_teacher(id):
     teacher = Teacher.query.get_or_404(id)
     teacher.title = request.form.get('title')
+    teacher.first_name = request.form.get('first_name').strip()
+    teacher.last_name = request.form.get('last_name').strip()
+    teacher.email = request.form.get('email').strip().lower()
+    
     new_pass = request.form.get('new_password')
     if new_pass:
         teacher.password = generate_password_hash(new_pass)
@@ -331,11 +368,25 @@ def delete_teacher(id):
 @teacher_required
 def cohort_view(id):
     cohort = Cohort.query.get_or_404(id)
+    is_y13 = get_cohort_status(cohort)
     practicals, all_skills = Practical.query.all(), Skill.query.all()
     matrix = [{'id': p.id, 'name': p.name, 'skills': [s.name for s in p.skills]} for p in practicals]
 
     students_data = []
+    unique_classes = set()
+    
     for s in cohort.students:
+        current_class = s.y13_class if is_y13 else s.y12_class
+        if current_class:
+            unique_classes.add(current_class)
+            
+        # Determine Display string (e.g. "13D (was 12B)")
+        display_class = current_class or "Unassigned"
+        if is_y13 and s.y12_class and s.y13_class != s.y12_class:
+            display_class = f"{s.y13_class} (was {s.y12_class})"
+        elif is_y13 and not s.y13_class and s.y12_class:
+            display_class = f"Unassigned (was {s.y12_class})"
+
         assessments = Assessment.query.filter_by(student_id=s.id).all()
         skill_totals = {sk.name: 0 for sk in all_skills}
         prac_totals = {p.id: 0 for p in practicals}
@@ -348,14 +399,32 @@ def cohort_view(id):
             assessed_cells[a.practical_id][sk_name] = True
             
         status = "Fail" if any(count < 3 for count in skill_totals.values()) else "Pass"
-        students_data.append({'id': s.id, 'first_name': s.first_name, 'last_name': s.last_name, 'total_ticks': len(assessments), 'status': status, 'skill_totals': skill_totals, 'prac_totals': prac_totals, 'assessed_cells': assessed_cells})
+        students_data.append({
+            'id': s.id, 'first_name': s.first_name, 'last_name': s.last_name, 
+            'current_class': current_class or "", 'display_class': display_class,
+            'total_ticks': len(assessments), 'status': status, 
+            'assessed_cells': assessed_cells
+        })
 
-    return render_template('cohort.html', cohort=cohort, title=get_cohort_title(cohort.end_year), matrix=json.dumps(matrix), students_json=json.dumps(students_data), prac_names=json.dumps({p.id: p.name for p in practicals}))
+    return render_template('cohort.html', cohort=cohort, is_y13=is_y13, unique_classes=sorted(list(unique_classes)), 
+                           title=get_cohort_title(cohort.end_year), matrix=json.dumps(matrix), 
+                           students_json=json.dumps(students_data))
 
 @app.route('/cohort/<int:id>/add_student', methods=['POST'])
 @teacher_required
 def add_student(id):
-    db.session.add(Student(first_name=request.form.get('first_name').strip(), last_name=request.form.get('last_name').strip(), cohort_id=id))
+    cohort = Cohort.query.get_or_404(id)
+    is_y13 = get_cohort_status(cohort)
+    cname = request.form.get('class_name', '').strip()
+    
+    y12_c = cname if not is_y13 else None
+    y13_c = cname if is_y13 else None
+    
+    db.session.add(Student(
+        first_name=request.form.get('first_name').strip(), 
+        last_name=request.form.get('last_name').strip(), 
+        cohort_id=id, y12_class=y12_c, y13_class=y13_c
+    ))
     db.session.commit()
     flash('Student added.', 'success')
     return redirect(url_for('cohort_view', id=id))
@@ -363,25 +432,51 @@ def add_student(id):
 @app.route('/cohort/<int:id>/bulk_add', methods=['POST'])
 @teacher_required
 def bulk_add(id):
+    cohort = Cohort.query.get_or_404(id)
+    is_y13 = get_cohort_status(cohort)
     format_type = request.form.get('format')
     data = request.form.get('students_data').strip().split('\n')
+    
+    added_count = 0
     for line in data:
         line = line.strip()
         if not line: continue
-        fname, lname = "", ""
-        if format_type == "First, Last":
-            parts = line.split(',')
-            if len(parts) >= 2: fname, lname = parts[0].strip(), parts[1].strip()
-        elif format_type == "Last, First":
-            parts = line.split(',')
-            if len(parts) >= 2: lname, fname = parts[0].strip(), parts[1].strip()
-        elif format_type == "Last First":
-            parts = line.split()
-            if len(parts) >= 2: lname, fname = parts[0], " ".join(parts[1:])
+        fname, lname, cname = parse_student_line(line, format_type)
         if fname and lname:
-            db.session.add(Student(first_name=fname, last_name=lname, cohort_id=id))
+            y12_c = cname if not is_y13 else None
+            y13_c = cname if is_y13 else None
+            db.session.add(Student(first_name=fname, last_name=lname, cohort_id=id, y12_class=y12_c, y13_class=y13_c))
+            added_count += 1
+            
     db.session.commit()
-    flash('Bulk students added successfully.', 'success')
+    flash(f'Successfully imported {added_count} students.', 'success')
+    return redirect(url_for('cohort_view', id=id))
+
+@app.route('/cohort/<int:id>/bulk_update_classes', methods=['POST'])
+@teacher_required
+def bulk_update_classes(id):
+    cohort = Cohort.query.get_or_404(id)
+    is_y13 = get_cohort_status(cohort)
+    format_type = request.form.get('format')
+    data = request.form.get('students_data').strip().split('\n')
+    
+    updated_count = 0
+    for line in data:
+        line = line.strip()
+        if not line: continue
+        fname, lname, cname = parse_student_line(line, format_type)
+        if fname and lname and cname:
+            # Locate student by first and last name within this cohort
+            student = Student.query.filter(Student.cohort_id == id, Student.first_name.ilike(fname), Student.last_name.ilike(lname)).first()
+            if student:
+                if is_y13:
+                    student.y13_class = cname
+                else:
+                    student.y12_class = cname
+                updated_count += 1
+                
+    db.session.commit()
+    flash(f'Successfully updated classes for {updated_count} existing students.', 'success')
     return redirect(url_for('cohort_view', id=id))
 
 @app.route('/cohort/<int:id>/delete_students', methods=['POST'])
@@ -394,36 +489,42 @@ def delete_students(id):
         flash(f'Deleted {len(student_ids)} student(s).', 'success')
     return redirect(url_for('cohort_view', id=id))
 
-# --- NEW BULK MARK & API ROUTES ---
+# --- BULK MARK & API ROUTES ---
 @app.route('/cohort/<int:cohort_id>/practical/<int:prac_id>/bulk_mark')
 @teacher_required
 def bulk_mark(cohort_id, prac_id):
     cohort = Cohort.query.get_or_404(cohort_id)
     practical = Practical.query.get_or_404(prac_id)
+    is_y13 = get_cohort_status(cohort)
     
     # Pre-fetch all data to pass to the template cleanly
     attendances = Attendance.query.filter(Attendance.student_id.in_([s.id for s in cohort.students]), Attendance.practical_id == practical.id).all()
     att_dict = {a.student_id: a.is_present for a in attendances}
     
     assessments = Assessment.query.filter(Assessment.student_id.in_([s.id for s in cohort.students]), Assessment.practical_id == practical.id).all()
-    # Create a nested dict: { student_id: [skill_id_1, skill_id_2] }
     assessed_dict = {s.id: [] for s in cohort.students}
     for a in assessments:
         assessed_dict[a.student_id].append(a.skill_id)
+        
+    unique_classes = set()
+    for s in cohort.students:
+        c = s.y13_class if is_y13 else s.y12_class
+        if c: unique_classes.add(c)
             
     sorted_students = sorted(cohort.students, key=lambda s: s.last_name)
-    return render_template('bulk_mark.html', cohort=cohort, practical=practical, students=sorted_students, skills=practical.skills, att_dict=att_dict, assessed_dict=assessed_dict)
+    return render_template('bulk_mark.html', cohort=cohort, practical=practical, students=sorted_students, 
+                           skills=practical.skills, att_dict=att_dict, assessed_dict=assessed_dict, 
+                           is_y13=is_y13, unique_classes=sorted(list(unique_classes)))
 
 @app.route('/api/update_mark', methods=['POST'])
 @teacher_required
 def api_update_mark():
-    """Handles silent background saves from the Bulk Mark page"""
     data = request.get_json()
     student_ids = data.get('student_ids', [])
     prac_id = data.get('prac_id')
-    mark_type = data.get('type') # 'attendance' or 'skill'
-    skill_id = data.get('skill_id') # required if type == 'skill'
-    is_achieved = data.get('value') # boolean True/False
+    mark_type = data.get('type') 
+    skill_id = data.get('skill_id')
+    is_achieved = data.get('value')
 
     for sid in student_ids:
         if mark_type == 'attendance':
@@ -450,6 +551,8 @@ def api_update_mark():
 def student_view(id):
     if current_user.role == 'student' and current_user.id != id: abort(403)
     student = Student.query.get_or_404(id)
+    is_y13 = get_cohort_status(student.cohort)
+    
     assessments = Assessment.query.filter_by(student_id=student.id).all()
     attendances = Attendance.query.filter_by(student_id=student.id).all()
     
@@ -461,7 +564,9 @@ def student_view(id):
         prac_scores[Practical.query.get(a.practical_id)] += 1
         skill_scores[Skill.query.get(a.skill_id)] += 1
         
-    return render_template('student.html', student=student, prac_scores=prac_scores, skill_scores=skill_scores, total_score=len(assessments), date=datetime.utcnow().strftime('%d/%m/%Y'), attendance_status=attendance_status)
+    return render_template('student.html', student=student, prac_scores=prac_scores, skill_scores=skill_scores, 
+                           total_score=len(assessments), date=datetime.utcnow().strftime('%d/%m/%Y'), 
+                           attendance_status=attendance_status, is_y13=is_y13)
 
 @app.route('/grade/<int:student_id>/<int:prac_id>', methods=['GET', 'POST'])
 @login_required
@@ -469,6 +574,7 @@ def grade(student_id, prac_id):
     if current_user.role == 'student' and current_user.id != student_id: abort(403)
     student = Student.query.get_or_404(student_id)
     practical = Practical.query.get_or_404(prac_id)
+    is_y13 = get_cohort_status(student.cohort)
     skills = practical.skills
     
     if request.method == 'POST' and current_user.role == 'teacher':
@@ -512,7 +618,8 @@ def grade(student_id, prac_id):
         t = Teacher.query.get(att_record.teacher_id)
         att_signature = f"{t.title} {t.first_name[0]} {t.last_name} ({att_record.timestamp.strftime('%d/%m/%Y')})"
 
-    return render_template('grade.html', student=student, practical=practical, skills=skills, assessed=assessed_skill_ids, signatures=signatures, attendance=att_record, att_signature=att_signature)
+    return render_template('grade.html', student=student, practical=practical, skills=skills, assessed=assessed_skill_ids, 
+                           signatures=signatures, attendance=att_record, att_signature=att_signature, is_y13=is_y13)
 
 @app.route('/export_data')
 @teacher_required
@@ -532,9 +639,9 @@ def export_data():
         ws_cohorts.append([c.id, c.start_year, c.end_year])
 
     ws_students = wb.create_sheet("Students")
-    ws_students.append(["ID", "First Name", "Last Name", "Cohort ID"])
+    ws_students.append(["ID", "First Name", "Last Name", "Cohort ID", "Y12 Class", "Y13 Class"])
     for s in Student.query.all():
-        ws_students.append([s.id, s.first_name, s.last_name, s.cohort_id])
+        ws_students.append([s.id, s.first_name, s.last_name, s.cohort_id, s.y12_class or "", s.y13_class or ""])
 
     ws_skills = wb.create_sheet("Skills")
     ws_skills.append(["ID", "Skill Name", "Description"])

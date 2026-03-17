@@ -55,6 +55,7 @@
 	#subHeaders th {
 		top: 41px;
 	}
+
 	.student-name-cell {
 		cursor: pointer;
 		transition:
@@ -82,12 +83,95 @@
 		height: 100%;
 		font-weight: bold;
 	}
+
+	/* Updated Practical Header Link to match student-name-cell styling */
 	.prac-header-link {
-		color: var(--primary);
-		text-decoration: none;
+		cursor: pointer;
+		transition:
+			background-color 0.1s ease,
+			color 0.1s ease;
 	}
 	.prac-header-link:hover {
-		text-decoration: underline;
+		background-color: #eef3fc !important;
+		color: var(--primary);
+	}
+	.prac-header-link {
+		display: block;
+		color: var(--text);
+		text-decoration: none;
+		padding: 0.4rem;
+		border-radius: 6px;
+		font-weight: 600;
+		transition:
+			background-color 0.1s ease,
+			color 0.1s ease;
+	}
+	.prac-header-link:hover {
+		background-color: #eef3fc !important;
+		color: var(--primary) !important;
+	}
+	.prac-header-link::before {
+		font-size: 0.8em;
+		color: #6c757d;
+		display: block;
+		font-weight: normal;
+		margin-bottom: 0.2rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	/* Custom Dropdown Styles */
+	.custom-dropdown {
+		position: relative;
+		display: inline-block;
+		width: 180px;
+	}
+	.dropdown-btn {
+		width: 100%;
+		padding: 0.6rem;
+		background: white;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		text-align: left;
+		cursor: pointer;
+		font-size: 0.85rem;
+		color: #495057;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.dropdown-content {
+		display: none;
+		position: absolute;
+		background-color: white;
+		min-width: 100%;
+		box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.1);
+		z-index: 50;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		max-height: 250px;
+		overflow-y: auto;
+		margin-top: 4px;
+	}
+	.dropdown-content.show {
+		display: block;
+	}
+	.dropdown-content label {
+		display: flex;
+		align-items: center;
+		padding: 0.5rem 0.8rem;
+		cursor: pointer;
+		font-weight: normal;
+		margin: 0;
+		font-size: 0.85rem;
+		border-bottom: 1px solid #f8f9fa;
+	}
+	.dropdown-content label:hover {
+		background-color: #f4f6f8;
+	}
+	.dropdown-content input {
+		margin-right: 8px;
+		cursor: pointer;
 	}
 </style>
 
@@ -114,6 +198,17 @@
 			">
 			+ Bulk Add
 		</button>
+		{% if is_y13 %}
+		<button
+			class="btn"
+			style="background: #198754; border: 1px solid #198754"
+			onclick="
+				document.getElementById('bulkUpdateModal').style.display =
+					'flex'
+			">
+			Bulk Update Y13 Classes
+		</button>
+		{% endif %}
 	</div>
 </div>
 
@@ -127,16 +222,46 @@
 				type="text"
 				id="searchInput"
 				placeholder="Search students..."
-				style="width: 250px; margin: 0" />
-			<select id="sortSelect" style="width: 220px; margin: 0">
-				<option value="name_asc">Sort by: Surname Alphabetical</option>
-				<option value="ticks_desc">
-					Sort by: Total Ticks (Descending)
-				</option>
-				<option value="ticks_asc">
-					Sort by: Total Ticks (Ascending)
-				</option>
+				style="width: 200px; margin: 0" />
+
+			<div class="custom-dropdown">
+				<button
+					type="button"
+					class="dropdown-btn"
+					id="classDropdownBtn"
+					onclick="toggleDropdown('classDropdown')">
+					All Classes <span style="font-size: 0.7rem">▼</span>
+				</button>
+				<div id="classDropdown" class="dropdown-content">
+					{% for c in unique_classes %}
+					<label>
+						<input
+							type="checkbox"
+							value="{{ c }}"
+							onchange="
+								updateDropdown();
+								filterTable();
+							" />
+						{{ c }}
+					</label>
+					{% endfor %}
+				</div>
+			</div>
+
+			<select
+				id="sortSelect"
+				style="
+					width: 200px;
+					margin: 0;
+					padding: 0.6rem;
+					border-radius: 6px;
+					border: 1px solid var(--border);
+				">
+				<option value="name_asc">Sort: Alphabetical</option>
+				<option value="ticks_desc">Sort: Ticks (High-Low)</option>
+				<option value="ticks_asc">Sort: Ticks (Low-High)</option>
 			</select>
+
 			<label
 				style="
 					cursor: pointer;
@@ -145,13 +270,13 @@
 					display: flex;
 					align-items: center;
 					gap: 0.5rem;
-					margin-left: 1rem;
+					margin-left: 0.5rem;
 				">
 				<input
 					type="checkbox"
 					id="failFilter"
 					style="width: auto; margin: 0; cursor: pointer" />
-				Show only failing students
+				Show only failing
 			</label>
 		</div>
 		<button
@@ -186,6 +311,10 @@
 				name="last_name"
 				placeholder="Surname"
 				required />
+			<input
+				type="text"
+				name="class_name"
+				placeholder="Class (e.g. 12D)" />
 			<div
 				style="
 					display: flex;
@@ -237,12 +366,12 @@
 					><input
 						type="radio"
 						name="format"
-						value="First, Last"
+						value="First, Last, Class"
 						checked
 						style="width: auto; margin-right: 0.5rem" />
-					<strong>First Name, Surname</strong>
+					<strong>First Name, Surname, Class</strong>
 					<span style="color: #6c757d"
-						>(e.g. John, Smith)</span
+						>(e.g. John, Smith, 12D)</span
 					></label
 				>
 				<label
@@ -254,21 +383,23 @@
 					><input
 						type="radio"
 						name="format"
-						value="Last, First"
+						value="Last, First, Class"
 						style="width: auto; margin-right: 0.5rem" />
-					<strong>Surname, First Name</strong>
+					<strong>Surname, First Name, Class</strong>
 					<span style="color: #6c757d"
-						>(e.g. Smith, John)</span
+						>(e.g. Smith, John, 12D)</span
 					></label
 				>
 				<label style="display: block; cursor: pointer"
 					><input
 						type="radio"
 						name="format"
-						value="Last First"
+						value="Last First Class"
 						style="width: auto; margin-right: 0.5rem" />
-					<strong>Surname First Name</strong>
-					<span style="color: #6c757d">(e.g. Smith John)</span></label
+					<strong>Surname First Name Class</strong>
+					<span style="color: #6c757d"
+						>(e.g. Smith John 12D)</span
+					></label
 				>
 			</div>
 			<textarea
@@ -302,89 +433,227 @@
 	</div>
 </div>
 
-<script>
-		const matrix = {{ matrix | safe }};
-		const students = {{ students_json | safe }};
-		const thead = document.getElementById('tableHead');
-		const tbody = document.getElementById('tableBody');
-		const cohort_id = {{ cohort.id }};
+{% if is_y13 %}
+<div id="bulkUpdateModal" class="modal">
+	<div class="modal-content" style="width: 550px">
+		<h3 style="margin-top: 0; margin-bottom: 1.5rem">
+			Bulk Update Year 13 Classes
+		</h3>
+		<form
+			method="POST"
+			action="{{ url_for('bulk_update_classes', id=cohort.id) }}">
+			<p style="margin-top: 0; color: #495057">
+				Paste the student names alongside their
+				<strong>new Year 13 class</strong>. The system will match them
+				by name and append the new class, preserving their historical
+				Y12 class.
+			</p>
+			<div
+				style="
+					margin-bottom: 1.5rem;
+					background: #f8f9fa;
+					padding: 1.2rem;
+					border-radius: 8px;
+					border: 1px solid var(--border);
+				">
+				<label
+					style="
+						display: block;
+						margin-bottom: 0.5rem;
+						cursor: pointer;
+					"
+					><input
+						type="radio"
+						name="format"
+						value="First, Last, Class"
+						checked
+						style="width: auto; margin-right: 0.5rem" />
+					<strong>First Name, Surname, New Class</strong></label
+				>
+				<label
+					style="
+						display: block;
+						margin-bottom: 0.5rem;
+						cursor: pointer;
+					"
+					><input
+						type="radio"
+						name="format"
+						value="Last, First, Class"
+						style="width: auto; margin-right: 0.5rem" />
+					<strong>Surname, First Name, New Class</strong></label
+				>
+				<label style="display: block; cursor: pointer"
+					><input
+						type="radio"
+						name="format"
+						value="Last First Class"
+						style="width: auto; margin-right: 0.5rem" />
+					<strong>Surname First Name New Class</strong></label
+				>
+			</div>
+			<textarea
+				name="students_data"
+				rows="10"
+				placeholder="Smith, John, 13D&#10;Doe, Jane, 13B"
+				required
+				style="
+					resize: none;
+					font-family: monospace;
+					padding: 1rem;
+					width: 100%;
+					border: 1px solid var(--border);
+					border-radius: 6px;
+					box-sizing: border-box;
+					margin-bottom: 1.5rem;
+				"></textarea>
+			<div style="display: flex; justify-content: flex-end; gap: 1rem">
+				<button
+					type="button"
+					class="btn btn-outline"
+					onclick="
+						document.getElementById(
+							'bulkUpdateModal',
+						).style.display = 'none'
+					">
+					Cancel
+				</button>
+				<button
+					type="submit"
+					class="btn"
+					style="background: #198754; color: white">
+					Update Classes
+				</button>
+			</div>
+		</form>
+	</div>
+</div>
+{% endif %}
 
-		let topRow = `<tr><th class="pinned-col" style="display:flex; gap:0.5rem; align-items:center;"><input type="checkbox" id="selectAll" style="width:auto;margin:0;"> Student Name</th><th>Total Ticks</th><th>Status</th>`;
-		let subRow = `<tr id="subHeaders"><th class="pinned-col"></th><th></th><th></th>`;
+<script>
+	// --- Custom Dropdown Logic ---
+	function toggleDropdown(id) {
+	    document.getElementById(id).classList.toggle("show");
+	}
+
+	function updateDropdown() {
+	    const checkboxes = document.querySelectorAll('#classDropdown input:checked');
+	    const btn = document.getElementById('classDropdownBtn');
+	    if (checkboxes.length === 0) {
+	        btn.innerHTML = 'All Classes <span style="font-size: 0.7rem;">▼</span>';
+	    } else {
+	        btn.innerHTML = `${checkboxes.length} Selected <span style="font-size: 0.7rem;">▼</span>`;
+	    }
+	}
+
+	// Close dropdown if clicked outside
+	window.onclick = function(event) {
+	    if (!event.target.matches('.dropdown-btn') && !event.target.closest('.custom-dropdown')) {
+	        var dropdowns = document.getElementsByClassName("dropdown-content");
+	        for (var i = 0; i < dropdowns.length; i++) {
+	            if (dropdowns[i].classList.contains('show')) {
+	                dropdowns[i].classList.remove('show');
+	            }
+	        }
+	    }
+	}
+
+	// --- Table Render Logic ---
+	const matrix = {{ matrix | safe }};
+	const students = {{ students_json | safe }};
+	const cohort_id = {{ cohort.id }};
+	const thead = document.getElementById('tableHead');
+	const tbody = document.getElementById('tableBody');
+
+	let topRow = `<tr>
+	    <th class="pinned-col" style="display:flex; gap:0.5rem; align-items:center;"><input type="checkbox" id="selectAll" style="width:auto;margin:0;"> Student Name</th>
+	    <th>Class</th>
+	    <th>Total Ticks</th>
+	    <th>Status</th>`;
+
+	let subRow = `<tr id="subHeaders">
+	    <th class="pinned-col"></th>
+	    <th></th>
+	    <th></th>
+	    <th></th>`;
 
 	matrix.forEach(p => {
-	        // Notice the href now points to /bulk_mark instead of /attendance
-	        topRow += `<th colspan="${p.skills.length}">
-	            <a href="/cohort/${cohort_id}/practical/${p.id}/bulk_mark" class="prac-header-link" title="Open Bulk Mark Grid">${p.name}</a>
-	        </th>`;
-	        p.skills.forEach(sk => subRow += `<th>${sk}</th>`);
+	    topRow += `<th colspan="${p.skills.length}">
+	        <a href="/cohort/${cohort_id}/practical/${p.id}/bulk_mark" class="prac-header-link" title="Open Bulk Mark Grid">${p.name}</a>
+	    </th>`;
+	    p.skills.forEach(sk => subRow += `<th>${sk}</th>`);
+	});
+	topRow += `</tr>`; subRow += `</tr>`;
+	thead.innerHTML = topRow + subRow;
+
+	function renderTable() {
+	    let term = document.getElementById('searchInput').value.toLowerCase();
+	    let sortMode = document.getElementById('sortSelect').value;
+	    let showFailing = document.getElementById('failFilter').checked;
+
+	    let selectedClasses = Array.from(document.querySelectorAll('#classDropdown input:checked')).map(cb => cb.value);
+
+	    let filtered = students.filter(s => {
+	        let matchName = s.first_name.toLowerCase().includes(term) || s.last_name.toLowerCase().includes(term);
+	        let matchFail = showFailing ? s.status === 'Fail' : true;
+	        let matchClass = selectedClasses.length === 0 || selectedClasses.includes(s.current_class);
+	        return matchName && matchFail && matchClass;
 	    });
-		topRow += `</tr>`; subRow += `</tr>`;
-		thead.innerHTML = topRow + subRow;
 
-		function renderTable() {
-		    let term = document.getElementById('searchInput').value.toLowerCase();
-		    let sortMode = document.getElementById('sortSelect').value;
-		    let showFailing = document.getElementById('failFilter').checked;
+	    filtered.sort((a, b) => {
+	        if (sortMode === 'name_asc') return a.last_name.localeCompare(b.last_name);
+	        if (sortMode === 'ticks_desc') return b.total_ticks - a.total_ticks;
+	        if (sortMode === 'ticks_asc') return a.total_ticks - b.total_ticks;
+	    });
 
-		    let filtered = students.filter(s => {
-		        let matchName = s.first_name.toLowerCase().includes(term) || s.last_name.toLowerCase().includes(term);
-		        return matchName && (showFailing ? s.status === 'Fail' : true);
-		    });
+	    let tbodyHtml = '';
+	    filtered.forEach(s => {
+	        let rowHtml = `<tr class="student-row">
+	            <td class="pinned-col student-name-cell" style="display:flex; gap:0.5rem; align-items:center;">
+	                <input type="checkbox" name="student_ids" value="${s.id}" class="student-cb" style="width:auto;margin:0;" onclick="event.stopPropagation(); toggleDeleteBtn();">
+	                <span onclick="window.location.href='/student/${s.id}'" style="width:100%; height:100%; display:block;">${s.last_name}, ${s.first_name}</span>
+	            </td>
+	            <td style="color: #495057; font-weight:500;">${s.display_class}</td>
+	            <td>${s.total_ticks}</td>
+	            <td style="color:${s.status==='Fail'?'#dc3545':'#198754'}; font-weight:bold;">${s.status}</td>`;
 
-		    filtered.sort((a, b) => {
-		        if (sortMode === 'name_asc') return a.last_name.localeCompare(b.last_name);
-		        if (sortMode === 'ticks_desc') return b.total_ticks - a.total_ticks;
-		        if (sortMode === 'ticks_asc') return a.total_ticks - b.total_ticks;
-		    });
+	        matrix.forEach(p => {
+	            p.skills.forEach(sk => {
+	                let checked = s.assessed_cells[p.id] && s.assessed_cells[p.id][sk];
+	                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${checked ? '✓' : ''}</td>`;
+	            });
+	        });
+	        rowHtml += `</tr>`;
+	        tbodyHtml += rowHtml;
+	    });
+	    tbody.innerHTML = tbodyHtml;
+	}
 
-		    let tbodyHtml = '';
-		    filtered.forEach(s => {
-		        let rowHtml = `<tr class="student-row">
-		            <td class="pinned-col student-name-cell" style="display:flex; gap:0.5rem; align-items:center;">
-		                <input type="checkbox" name="student_ids" value="${s.id}" class="student-cb" style="width:auto;margin:0;" onclick="event.stopPropagation(); toggleDeleteBtn();">
-		                <span onclick="window.location.href='/student/${s.id}'" style="width:100%; height:100%; display:block;">${s.last_name}, ${s.first_name}</span>
-		            </td>
-		            <td>${s.total_ticks}</td>
-		            <td style="color:${s.status==='Fail'?'#dc3545':'#198754'}; font-weight:bold;">${s.status}</td>`;
+	['keyup','change'].forEach(evt => {
+	    document.getElementById('searchInput').addEventListener(evt, renderTable);
+	    document.getElementById('sortSelect').addEventListener(evt, renderTable);
+	    document.getElementById('failFilter').addEventListener(evt, renderTable);
+	});
 
-		        matrix.forEach(p => {
-		            p.skills.forEach(sk => {
-		                let checked = s.assessed_cells[p.id] && s.assessed_cells[p.id][sk];
-		                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${checked ? '✓' : ''}</td>`;
-		            });
-		        });
-		        rowHtml += `</tr>`;
-		        tbodyHtml += rowHtml;
-		    });
-		    tbody.innerHTML = tbodyHtml;
-		}
+	document.getElementById('selectAll').addEventListener('change', function(e) {
+	    document.querySelectorAll('.student-cb').forEach(cb => cb.checked = e.target.checked);
+	    toggleDeleteBtn();
+	});
 
-		['keyup','change'].forEach(evt => {
-		    document.getElementById('searchInput').addEventListener(evt, renderTable);
-		    document.getElementById('sortSelect').addEventListener(evt, renderTable);
-		    document.getElementById('failFilter').addEventListener(evt, renderTable);
-		});
+	function toggleDeleteBtn() {
+	    const checked = document.querySelectorAll('.student-cb:checked').length;
+	    document.getElementById('deleteBtn').style.display = checked > 0 ? 'block' : 'none';
+	}
 
-		document.getElementById('selectAll').addEventListener('change', function(e) {
-		    document.querySelectorAll('.student-cb').forEach(cb => cb.checked = e.target.checked);
-		    toggleDeleteBtn();
-		});
+	tbody.addEventListener('mouseover', e => {
+	    let td = e.target.closest('td.prac-cell');
+	    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.add('prac-hover-highlight'));
+	});
+	tbody.addEventListener('mouseout', e => {
+	    let td = e.target.closest('td.prac-cell');
+	    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.remove('prac-hover-highlight'));
+	});
 
-		function toggleDeleteBtn() {
-		    const checked = document.querySelectorAll('.student-cb:checked').length;
-		    document.getElementById('deleteBtn').style.display = checked > 0 ? 'block' : 'none';
-		}
-
-		tbody.addEventListener('mouseover', e => {
-		    let td = e.target.closest('td.prac-cell');
-		    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.add('prac-hover-highlight'));
-		});
-		tbody.addEventListener('mouseout', e => {
-		    let td = e.target.closest('td.prac-cell');
-		    if(td) td.closest('tr').querySelectorAll(`td.prac-cell[data-pracid="${td.dataset.pracid}"]`).forEach(c => c.classList.remove('prac-hover-highlight'));
-		});
-
-		renderTable();
+	renderTable();
 </script>
 {% endblock %}

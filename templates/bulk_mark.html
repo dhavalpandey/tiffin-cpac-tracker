@@ -1,5 +1,15 @@
 {% extends 'base.html' %} {% block content %}
 <style>
+	.student-name-cell {
+		cursor: pointer;
+		transition:
+			background-color 0.1s ease,
+			color 0.1s ease;
+	}
+	.student-name-cell:hover {
+		background-color: #eef3fc !important;
+		color: var(--primary);
+	}
 	.controls {
 		display: flex;
 		gap: 1rem;
@@ -26,7 +36,7 @@
 		white-space: nowrap;
 		width: 100%;
 		user-select: none;
-	} /* user-select none prevents accidental text highlighting when clicking fast */
+	}
 	th,
 	td {
 		padding: 0.6rem;
@@ -36,7 +46,6 @@
 		font-size: 0.95rem;
 	}
 
-	/* Sticky Headers */
 	th {
 		background: #f8f9fa;
 		position: sticky;
@@ -58,7 +67,6 @@
 		background: #e9ecef;
 	}
 
-	/* Interactive Cells */
 	.interactive-cell {
 		cursor: pointer;
 		transition: background-color 0.1s ease;
@@ -69,7 +77,6 @@
 		background-color: #eef3fc;
 	}
 
-	/* Cell States */
 	.cell-true {
 		background-color: #d1e7dd !important;
 		color: #0f5132;
@@ -83,7 +90,6 @@
 		color: #055160;
 	}
 
-	/* Header toggles */
 	.header-toggle {
 		cursor: pointer;
 		font-size: 0.8rem;
@@ -96,7 +102,6 @@
 		text-decoration: underline;
 	}
 
-	/* Saving Toast */
 	#saveToast {
 		position: fixed;
 		top: 20px;
@@ -110,6 +115,60 @@
 		font-weight: 500;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 		transition: opacity 0.3s;
+	}
+
+	/* Custom Dropdown Styles */
+	.custom-dropdown {
+		position: relative;
+		display: inline-block;
+		width: 160px;
+	}
+	.dropdown-btn {
+		width: 100%;
+		padding: 0.6rem;
+		background: white;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		text-align: left;
+		cursor: pointer;
+		font-size: 0.85rem;
+		color: #495057;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.dropdown-content {
+		display: none;
+		position: absolute;
+		background-color: white;
+		min-width: 100%;
+		box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.1);
+		z-index: 50;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		max-height: 250px;
+		overflow-y: auto;
+		margin-top: 4px;
+	}
+	.dropdown-content.show {
+		display: block;
+	}
+	.dropdown-content label {
+		display: flex;
+		align-items: center;
+		padding: 0.5rem 0.8rem;
+		cursor: pointer;
+		font-weight: normal;
+		margin: 0;
+		font-size: 0.85rem;
+		border-bottom: 1px solid #f8f9fa;
+	}
+	.dropdown-content label:hover {
+		background-color: #f4f6f8;
+	}
+	.dropdown-content input {
+		margin-right: 8px;
+		cursor: pointer;
 	}
 </style>
 
@@ -144,11 +203,41 @@
 		style="width: 250px; margin: 0"
 		onkeyup="filterTable()" />
 
+	<div class="custom-dropdown">
+		<button
+			type="button"
+			class="dropdown-btn"
+			id="classDropdownBtn"
+			onclick="toggleDropdown('classDropdown')">
+			All Classes <span style="font-size: 0.7rem">▼</span>
+		</button>
+		<div id="classDropdown" class="dropdown-content">
+			{% for c in unique_classes %}
+			<label>
+				<input
+					type="checkbox"
+					value="{{ c }}"
+					onchange="
+						updateDropdown();
+						filterTable();
+					" />
+				{{ c }}
+			</label>
+			{% endfor %}
+		</div>
+	</div>
+
 	<select
 		id="attendanceFilter"
-		style="width: 200px; margin: 0"
+		style="
+			width: 200px;
+			margin: 0;
+			padding: 0.6rem;
+			border-radius: 6px;
+			border: 1px solid var(--border);
+		"
 		onchange="filterTable()">
-		<option value="all">Show All Students</option>
+		<option value="all">Show All</option>
 		<option value="present">Present Only</option>
 		<option value="absent">Absent Only</option>
 	</select>
@@ -166,9 +255,10 @@
 		<thead>
 			<tr>
 				<th class="pinned-col">Student Name</th>
+				<th>Class</th>
 
 				<th style="background-color: #e0f0ff">
-					Present?
+					Present
 					<span
 						class="header-toggle"
 						onclick="toggleColumn('attendance', null, true)"
@@ -201,12 +291,20 @@
 			</tr>
 		</thead>
 		<tbody id="tableBody">
-			{% for student in students %}
+			{% for student in students %} {% set current_class =
+			student.y13_class if is_y13 else student.y12_class %}
+
 			<tr
 				class="student-row"
-				data-name="{{ student.last_name | lower }}, {{ student.first_name | lower }}">
-				<td class="pinned-col">
+				data-name="{{ student.last_name | lower }}, {{ student.first_name | lower }}"
+				data-class="{{ current_class or '' }}">
+				<td
+					class="pinned-col student-name-cell"
+					onclick="window.location.href='{{ url_for('student_view', id=student.id) }}'">
 					{{ student.last_name }}, {{ student.first_name }}
+				</td>
+				<td style="color: #495057; font-weight: 500">
+					{{ current_class or 'Unassigned' }}
 				</td>
 
 				{% set is_present = att_dict.get(student.id, False) %}
@@ -216,7 +314,7 @@
 					data-type="attendance"
 					data-val="{% if is_present %}true{% else %}false{% endif %}"
 					onclick="toggleCell(this)">
-					{% if is_present %}✅{% else %}❌{% endif %}
+					{% if is_present %}✓{% else %}✗{% endif %}
 				</td>
 
 				{% set student_skills = assessed_dict.get(student.id, []) %} {%
@@ -239,10 +337,36 @@
 </div>
 
 <script>
+	// --- Custom Dropdown Logic ---
+	function toggleDropdown(id) {
+	    document.getElementById(id).classList.toggle("show");
+	}
+
+	function updateDropdown() {
+	    const checkboxes = document.querySelectorAll('#classDropdown input:checked');
+	    const btn = document.getElementById('classDropdownBtn');
+	    if (checkboxes.length === 0) {
+	        btn.innerHTML = 'All Classes <span style="font-size: 0.7rem;">▼</span>';
+	    } else {
+	        btn.innerHTML = `${checkboxes.length} Selected <span style="font-size: 0.7rem;">▼</span>`;
+	    }
+	}
+
+	window.onclick = function(event) {
+	    if (!event.target.matches('.dropdown-btn') && !event.target.closest('.custom-dropdown')) {
+	        var dropdowns = document.getElementsByClassName("dropdown-content");
+	        for (var i = 0; i < dropdowns.length; i++) {
+	            if (dropdowns[i].classList.contains('show')) {
+	                dropdowns[i].classList.remove('show');
+	            }
+	        }
+	    }
+	}
+
+	// --- Bulk Mark Logic ---
 	const pracId = {{ practical.id }};
 	let toastTimeout;
 
-	// Show visual save notification
 	function showToast(message = "Saved") {
 	    const toast = document.getElementById('saveToast');
 	    toast.innerText = message;
@@ -255,33 +379,26 @@
 	    }, 1000);
 	}
 
-	// Handles individual cell clicks
 	function toggleCell(cell) {
-	    // 1. Get current state
 	    const isCurrentlyTrue = cell.getAttribute('data-val') === 'true';
 	    const newValue = !isCurrentlyTrue;
 	    const type = cell.getAttribute('data-type');
 
-	    // 2. Optimistic UI Update (Update visual instantly)
 	    cell.setAttribute('data-val', newValue);
 	    if(newValue) {
 	        cell.classList.remove('cell-false');
 	        cell.classList.add('cell-true');
-	        cell.innerText = type === 'attendance' ? '✅' : '✓';
+	        cell.innerText = '✓';
 	    } else {
 	        cell.classList.remove('cell-true');
 	        cell.classList.add('cell-false');
-	        cell.innerText = type === 'attendance' ? '❌' : '✗';
+	        cell.innerText = '✗';
 	    }
 
-	    // 3. Send to Server
 	    sendUpdate([parseInt(cell.getAttribute('data-sid'))], type, cell.getAttribute('data-skillid'), newValue);
-
-	    // 4. If we just changed attendance, re-run filters in case "Present Only" is active
 	    if(type === 'attendance') filterTable();
 	}
 
-	// Handles clicking "All ✓" or "None ✗" in the table headers
 	function toggleColumn(type, skillId, targetValue) {
 	    if(!confirm(`Are you sure you want to mark this column as ${targetValue ? 'Achieved/Present' : 'Not Achieved/Absent'} for ALL visible students?`)) return;
 
@@ -289,25 +406,21 @@
 	    let studentsToUpdate = [];
 
 	    rows.forEach(row => {
-	        // Only update rows that are not hidden by the search/filter
 	        if (row.style.display !== 'none') {
 	            let cellSelector = type === 'attendance' ? `td[data-type="attendance"]` : `td[data-type="skill"][data-skillid="${skillId}"]`;
 	            let cell = row.querySelector(cellSelector);
 
-	            // Only update if it's not already in the target state
 	            if (cell.getAttribute('data-val') !== targetValue.toString()) {
 	                studentsToUpdate.push(parseInt(cell.getAttribute('data-sid')));
-
-	                // Optimistic visual update
 	                cell.setAttribute('data-val', targetValue);
 	                if(targetValue) {
 	                    cell.classList.remove('cell-false');
 	                    cell.classList.add('cell-true');
-	                    cell.innerText = type === 'attendance' ? '✅' : '✓';
+	                    cell.innerText = '✓';
 	                } else {
 	                    cell.classList.remove('cell-true');
 	                    cell.classList.add('cell-false');
-	                    cell.innerText = type === 'attendance' ? '❌' : '✗';
+	                    cell.innerText = '✗';
 	                }
 	            }
 	        }
@@ -319,55 +432,42 @@
 	    }
 	}
 
-	// The actual fetch request to the backend
 	function sendUpdate(studentIds, type, skillId, value) {
 	    showToast("Saving...");
-
 	    fetch('/api/update_mark', {
 	        method: 'POST',
 	        headers: { 'Content-Type': 'application/json' },
-	        body: JSON.stringify({
-	            student_ids: studentIds,
-	            prac_id: pracId,
-	            type: type,
-	            skill_id: skillId ? parseInt(skillId) : null,
-	            value: value
-	        })
+	        body: JSON.stringify({ student_ids: studentIds, prac_id: pracId, type: type, skill_id: skillId ? parseInt(skillId) : null, value: value })
 	    })
 	    .then(response => response.json())
-	    .then(data => {
-	        if(data.success) showToast("Saved");
-	    })
-	    .catch(error => {
-	        console.error('Error:', error);
-	        showToast("⚠️ Error Saving");
-	        // If this was production, you might want to revert the cell color here if it fails
-	    });
+	    .then(data => { if(data.success) showToast("Saved"); })
+	    .catch(error => { console.error('Error:', error); showToast("Error Saving"); });
 	}
 
-	// Search and Filtering
 	function filterTable() {
 	    const term = document.getElementById('searchInput').value.toLowerCase();
 	    const attFilter = document.getElementById('attendanceFilter').value;
+	    const selectedClasses = Array.from(document.querySelectorAll('#classDropdown input:checked')).map(cb => cb.value);
 	    const rows = document.querySelectorAll('.student-row');
 
 	    rows.forEach(row => {
 	        const name = row.getAttribute('data-name');
+	        const stuClass = row.getAttribute('data-class');
 	        const attCell = row.querySelector('td[data-type="attendance"]');
 	        const isPresent = attCell.getAttribute('data-val') === 'true';
 
 	        let nameMatches = name.includes(term);
+	        let classMatches = selectedClasses.length === 0 || selectedClasses.includes(stuClass);
 	        let attMatches = true;
 
 	        if (attFilter === 'present' && !isPresent) attMatches = false;
 	        if (attFilter === 'absent' && isPresent) attMatches = false;
 
-	        row.style.display = (nameMatches && attMatches) ? '' : 'none';
+	        row.style.display = (nameMatches && attMatches && classMatches) ? '' : 'none';
 	    });
 	}
 
-	// DOM Sorting
-	let isAscending = false; // Start false so first click sorts Ascending
+	let isAscending = false;
 	function sortAlphabetically() {
 	    isAscending = !isAscending;
 	    const tbody = document.getElementById('tableBody');
@@ -380,7 +480,6 @@
 	        if (nameA > nameB) return isAscending ? 1 : -1;
 	        return 0;
 	    });
-
 	    rows.forEach(row => tbody.appendChild(row));
 	}
 </script>

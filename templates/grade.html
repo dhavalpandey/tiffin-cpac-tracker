@@ -7,9 +7,13 @@
 		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
 	">
 	<h2 style="margin-top: 0">Grading: {{ practical.name }}</h2>
-	<p style="font-size: 1.1rem">
+	<p style="font-size: 1.1rem; margin-bottom: 0.2rem">
 		<strong>Student:</strong> {{ student.last_name }}, {{ student.first_name
 		}}
+	</p>
+	<p style="font-size: 0.95rem; color: #6c757d; margin-top: 0">
+		Class: {{ student.y13_class if is_y13 else student.y12_class or
+		"Unassigned" }}
 	</p>
 
 	<form method="POST">
