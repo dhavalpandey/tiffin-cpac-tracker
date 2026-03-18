@@ -6,6 +6,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
+from openpyxl.utils import get_column_letter
 from dotenv import load_dotenv
 
 load_dotenv() 
@@ -54,7 +56,6 @@ class Student(UserMixin, db.Model):
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     
-    # New Class Tracking Fields
     y12_class = db.Column(db.String(20), nullable=True)
     y13_class = db.Column(db.String(20), nullable=True)
     
@@ -126,13 +127,11 @@ def get_cohort_title(end_year):
     return f"Future (Starts {end_year-2})"
 
 def get_cohort_status(cohort):
-    """Returns True if the cohort has entered Year 13 (After Aug 1st of their second year)"""
     now = datetime.utcnow()
     transition_date = datetime(cohort.start_year + 1, 8, 1)
     return now >= transition_date
 
 def parse_student_line(line, format_type):
-    """Helper to parse bulk student additions"""
     fname, lname, cname = "", "", ""
     if format_type == "First, Last, Class":
         parts = [p.strip() for p in line.split(',')]
@@ -375,12 +374,17 @@ def cohort_view(id):
     students_data = []
     unique_classes = set()
     
+    # Pre-fetch attendance for performance
+    attendances = Attendance.query.filter(Attendance.student_id.in_([s.id for s in cohort.students])).all()
+    att_data = {s.id: {} for s in cohort.students}
+    for a in attendances:
+        att_data[a.student_id][a.practical_id] = a.is_present
+    
     for s in cohort.students:
         current_class = s.y13_class if is_y13 else s.y12_class
         if current_class:
             unique_classes.add(current_class)
             
-        # Determine Display string (e.g. "13D (was 12B)")
         display_class = current_class or "Unassigned"
         if is_y13 and s.y12_class and s.y13_class != s.y12_class:
             display_class = f"{s.y13_class} (was {s.y12_class})"
@@ -403,7 +407,8 @@ def cohort_view(id):
             'id': s.id, 'first_name': s.first_name, 'last_name': s.last_name, 
             'current_class': current_class or "", 'display_class': display_class,
             'total_ticks': len(assessments), 'status': status, 
-            'assessed_cells': assessed_cells
+            'assessed_cells': assessed_cells,
+            'attendance_cells': att_data.get(s.id, {})
         })
 
     return render_template('cohort.html', cohort=cohort, is_y13=is_y13, unique_classes=sorted(list(unique_classes)), 
@@ -466,7 +471,6 @@ def bulk_update_classes(id):
         if not line: continue
         fname, lname, cname = parse_student_line(line, format_type)
         if fname and lname and cname:
-            # Locate student by first and last name within this cohort
             student = Student.query.filter(Student.cohort_id == id, Student.first_name.ilike(fname), Student.last_name.ilike(lname)).first()
             if student:
                 if is_y13:
@@ -489,6 +493,140 @@ def delete_students(id):
         flash(f'Deleted {len(student_ids)} student(s).', 'success')
     return redirect(url_for('cohort_view', id=id))
 
+# --- COHORT SNAPSHOT EXPORT ---
+@app.route('/cohort/<int:id>/export', methods=['GET', 'POST'])
+@teacher_required
+def export_cohort(id):
+    cohort = Cohort.query.get_or_404(id)
+    is_y13 = get_cohort_status(cohort)
+    practicals = Practical.query.all()
+    all_skills = Skill.query.all()
+    
+    if request.method == 'POST':
+        raw_ids = request.form.get('filtered_student_ids', '')
+        if raw_ids:
+            ordered_ids = [int(x) for x in raw_ids.split(',')]
+            student_dict = {s.id: s for s in cohort.students}
+            target_students = [student_dict[sid] for sid in ordered_ids if sid in student_dict]
+        else:
+            target_students = []
+    else:
+        target_students = sorted(cohort.students, key=lambda s: s.last_name)
+
+    wb = Workbook()
+    
+    # 1. Main Cohort Data Sheet
+    ws = wb.active
+    cohort_title = get_cohort_title(cohort.end_year).replace(" ", "_")
+    ws.title = f"Data_{cohort_title}"
+
+    row1 = ["Student Name", "Class", "Total Ticks", "Status"]
+    row2 = ["", "", "", ""]
+
+    current_col = 5
+    merge_cells = [] 
+
+    for p in practicals:
+        # Add 1 to the width of the merge for the Present column
+        num_cols = len(p.skills) + 1 
+        
+        row1.append(p.name)
+        row1.extend([""] * (num_cols - 1))
+
+        start_col_letter = get_column_letter(current_col)
+        end_col_letter = get_column_letter(current_col + num_cols - 1)
+        merge_cells.append(f"{start_col_letter}1:{end_col_letter}1")
+
+        row2.append("Present")
+        for sk in p.skills:
+            row2.append(sk.name)
+
+        current_col += num_cols
+
+    ws.append(row1)
+    ws.append(row2)
+
+    for merge_range in merge_cells:
+        ws.merge_cells(merge_range)
+
+    header_font = Font(bold=True)
+    center_align = Alignment(horizontal="center", vertical="center")
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.alignment = center_align
+    for cell in ws[2]:
+        cell.font = header_font
+        cell.alignment = center_align
+
+    # Fast Lookups
+    attendances = Attendance.query.filter(Attendance.student_id.in_([s.id for s in target_students])).all()
+    student_att = {(a.student_id, a.practical_id): a.is_present for a in attendances}
+    
+    for s in target_students:
+        current_class = s.y13_class if is_y13 else s.y12_class
+        display_class = current_class or "Unassigned"
+        if is_y13 and s.y12_class and s.y13_class != s.y12_class:
+            display_class = f"{s.y13_class} (was {s.y12_class})"
+        elif is_y13 and not s.y13_class and s.y12_class:
+            display_class = f"Unassigned (was {s.y12_class})"
+
+        assessments = Assessment.query.filter_by(student_id=s.id).all()
+        skill_totals = {sk.name: 0 for sk in all_skills}
+        student_ticks = {(a.practical_id, a.skill_id): True for a in assessments}
+
+        for a in assessments:
+            sk_name = Skill.query.get(a.skill_id).name
+            skill_totals[sk_name] += 1
+
+        status = "Fail" if any(count < 3 for count in skill_totals.values()) else "Pass"
+        student_row = [f"{s.last_name}, {s.first_name}", display_class, len(assessments), status]
+
+        for p in practicals:
+            is_present = student_att.get((s.id, p.id), False)
+            student_row.append("✓" if is_present else "✗")
+            
+            for sk in p.skills:
+                if (p.id, sk.id) in student_ticks:
+                    student_row.append("✓")
+                else:
+                    student_row.append("")
+
+        ws.append(student_row)
+        for col_idx in range(5, len(student_row) + 1):
+            ws.cell(row=ws.max_row, column=col_idx).alignment = center_align
+
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 18
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 12
+
+    # 2. Reference Sheets
+    ws_practicals = wb.create_sheet("Practicals")
+    ws_practicals.append(["ID", "Practical Name", "Description"])
+    for prac in practicals:
+        ws_practicals.append([prac.id, prac.name, prac.description])
+
+    ws_skills = wb.create_sheet("Skills")
+    ws_skills.append(["ID", "Skill Name", "Description"])
+    for sk in all_skills:
+        ws_skills.append([sk.id, sk.name, sk.description])
+
+    ws_teachers = wb.create_sheet("Teachers")
+    ws_teachers.append(["ID", "Title", "First Name", "Last Name", "Email"])
+    for t in Teacher.query.all():
+        ws_teachers.append([t.id, t.title, t.first_name, t.last_name, t.email])
+
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+
+    date_str = datetime.utcnow().strftime('%Y-%m-%d')
+    filename = f"Tiffin_CPAC_{cohort_title}_{cohort.start_year}-{cohort.end_year}_Snapshot_{date_str}.xlsx"
+    return send_file(
+        out, as_attachment=True, download_name=filename, 
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 # --- BULK MARK & API ROUTES ---
 @app.route('/cohort/<int:cohort_id>/practical/<int:prac_id>/bulk_mark')
 @teacher_required
@@ -497,7 +635,6 @@ def bulk_mark(cohort_id, prac_id):
     practical = Practical.query.get_or_404(prac_id)
     is_y13 = get_cohort_status(cohort)
     
-    # Pre-fetch all data to pass to the template cleanly
     attendances = Attendance.query.filter(Attendance.student_id.in_([s.id for s in cohort.students]), Attendance.practical_id == practical.id).all()
     att_dict = {a.student_id: a.is_present for a in attendances}
     
@@ -621,6 +758,7 @@ def grade(student_id, prac_id):
     return render_template('grade.html', student=student, practical=practical, skills=skills, assessed=assessed_skill_ids, 
                            signatures=signatures, attendance=att_record, att_signature=att_signature, is_y13=is_y13)
 
+# --- GLOBAL EXPORT (DASHBOARD) ---
 @app.route('/export_data')
 @teacher_required
 def export_data():
@@ -670,7 +808,7 @@ def export_data():
     wb.save(out)
     out.seek(0)
     
-    filename = f"Tiffin_CPAC_Database_Export_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    filename = f"Tiffin_CPAC_Global_Database_Export_{datetime.utcnow().strftime('%Y-%m-%d')}.xlsx"
     return send_file(
         out, 
         as_attachment=True, 

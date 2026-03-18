@@ -75,26 +75,7 @@
 		background-color: #eef3fc !important;
 		color: #084298;
 	}
-	.cell-link {
-		display: block;
-		text-decoration: none;
-		color: inherit;
-		width: 100%;
-		height: 100%;
-		font-weight: bold;
-	}
 
-	/* Updated Practical Header Link to match student-name-cell styling */
-	.prac-header-link {
-		cursor: pointer;
-		transition:
-			background-color 0.1s ease,
-			color 0.1s ease;
-	}
-	.prac-header-link:hover {
-		background-color: #eef3fc !important;
-		color: var(--primary);
-	}
 	.prac-header-link {
 		display: block;
 		color: var(--text);
@@ -120,7 +101,6 @@
 		letter-spacing: 0.5px;
 	}
 
-	/* Custom Dropdown Styles */
 	.custom-dropdown {
 		position: relative;
 		display: inline-block;
@@ -173,6 +153,47 @@
 		margin-right: 8px;
 		cursor: pointer;
 	}
+
+	.tooltip-container {
+		position: relative;
+		display: inline-flex;
+	}
+	.tooltip-container .tooltip-text {
+		visibility: hidden;
+		width: max-content;
+		max-width: 250px;
+		background-color: #333;
+		color: #fff;
+		text-align: center;
+		border-radius: 6px;
+		padding: 0.6rem 0.8rem;
+		position: absolute;
+		z-index: 99;
+		top: 125%;
+		right: 0;
+		opacity: 0;
+		transition: opacity 0.2s;
+		font-size: 0.85rem;
+		font-weight: normal;
+		font-family:
+			-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		pointer-events: none;
+		line-height: 1.4;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	}
+	.tooltip-container .tooltip-text::after {
+		content: "";
+		position: absolute;
+		bottom: 100%;
+		right: 20px;
+		border-width: 5px;
+		border-style: solid;
+		border-color: transparent transparent #333 transparent;
+	}
+	.tooltip-container:hover .tooltip-text {
+		visibility: visible;
+		opacity: 1;
+	}
 </style>
 
 <div
@@ -212,90 +233,128 @@
 	</div>
 </div>
 
-<form
-	method="POST"
-	action="{{ url_for('delete_students', id=cohort.id) }}"
-	id="deleteStudentsForm">
-	<div class="controls" style="justify-content: space-between">
-		<div style="display: flex; gap: 1rem; align-items: center">
-			<input
-				type="text"
-				id="searchInput"
-				placeholder="Search students..."
-				style="width: 200px; margin: 0" />
+<div class="controls" style="justify-content: space-between">
+	<div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap">
+		<input
+			type="text"
+			id="searchInput"
+			placeholder="Search students..."
+			style="width: 200px; margin: 0" />
 
-			<div class="custom-dropdown">
-				<button
-					type="button"
-					class="dropdown-btn"
-					id="classDropdownBtn"
-					onclick="toggleDropdown('classDropdown')">
-					All Classes <span style="font-size: 0.7rem">▼</span>
-				</button>
-				<div id="classDropdown" class="dropdown-content">
-					{% for c in unique_classes %}
-					<label>
-						<input
-							type="checkbox"
-							value="{{ c }}"
-							onchange="
-								updateDropdown();
-								filterTable();
-							" />
-						{{ c }}
-					</label>
-					{% endfor %}
-				</div>
+		<div class="custom-dropdown">
+			<button
+				type="button"
+				class="dropdown-btn"
+				id="classDropdownBtn"
+				onclick="toggleDropdown('classDropdown')">
+				All Classes <span style="font-size: 0.7rem">▼</span>
+			</button>
+			<div id="classDropdown" class="dropdown-content">
+				{% for c in unique_classes %}
+				<label
+					><input
+						type="checkbox"
+						value="{{ c }}"
+						onchange="
+							updateDropdown();
+							renderTable();
+						" />
+					{{ c }}</label
+				>
+				{% endfor %}
 			</div>
-
-			<select
-				id="sortSelect"
-				style="
-					width: 200px;
-					margin: 0;
-					padding: 0.6rem;
-					border-radius: 6px;
-					border: 1px solid var(--border);
-				">
-				<option value="name_asc">Sort: Alphabetical</option>
-				<option value="ticks_desc">Sort: Ticks (High-Low)</option>
-				<option value="ticks_asc">Sort: Ticks (Low-High)</option>
-			</select>
-
-			<label
-				style="
-					cursor: pointer;
-					font-weight: 600;
-					color: #495057;
-					display: flex;
-					align-items: center;
-					gap: 0.5rem;
-					margin-left: 0.5rem;
-				">
-				<input
-					type="checkbox"
-					id="failFilter"
-					style="width: auto; margin: 0; cursor: pointer" />
-				Show only failing
-			</label>
 		</div>
-		<button
-			type="submit"
-			class="btn btn-danger"
-			onclick="return confirm('Delete selected students?');"
-			id="deleteBtn"
-			style="display: none">
-			Delete Selected
-		</button>
+
+		<select
+			id="sortSelect"
+			style="
+				width: 180px;
+				margin: 0;
+				padding: 0.6rem;
+				border-radius: 6px;
+				border: 1px solid var(--border);
+			">
+			<option value="name_asc">Sort: Alphabetical</option>
+			<option value="ticks_desc">Sort: Ticks (High-Low)</option>
+			<option value="ticks_asc">Sort: Ticks (Low-High)</option>
+		</select>
+
+		<label
+			style="
+				cursor: pointer;
+				font-weight: 600;
+				color: #495057;
+				display: flex;
+				align-items: center;
+				gap: 0.5rem;
+				margin-left: 0.5rem;
+			">
+			<input
+				type="checkbox"
+				id="failFilter"
+				style="width: auto; margin: 0; cursor: pointer" />
+			Show only failing
+		</label>
 	</div>
 
-	<div class="table-container">
-		<table id="cohortTable">
-			<thead id="tableHead"></thead>
-			<tbody id="tableBody"></tbody>
-		</table>
+	<div style="display: flex; align-items: center; gap: 1rem">
+		<form
+			method="POST"
+			action="{{ url_for('delete_students', id=cohort.id) }}"
+			id="deleteStudentsForm"
+			style="margin: 0">
+			<button
+				type="submit"
+				class="btn btn-danger"
+				onclick="return confirm('Delete selected students?');"
+				id="deleteBtn"
+				style="display: none">
+				Delete Selected
+			</button>
+		</form>
+
+		<form
+			method="POST"
+			action="{{ url_for('export_cohort', id=cohort.id) }}"
+			style="margin: 0">
+			<input
+				type="hidden"
+				name="filtered_student_ids"
+				id="filteredStudentIds" />
+
+			<div class="tooltip-container">
+				<button
+					type="submit"
+					class="btn btn-outline"
+					style="display: flex; align-items: center; gap: 0.5rem">
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						fill="currentColor"
+						viewBox="0 0 16 16">
+						<path
+							d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
+						<path
+							d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
+					</svg>
+					Download Snapshot
+				</button>
+				<span class="tooltip-text"
+					>This downloads exactly what you see right now, preserving
+					all your current filters and sorting rules.</span
+				>
+			</div>
+		</form>
 	</div>
-</form>
+</div>
+
+<div class="table-container">
+	<table id="cohortTable">
+		<thead id="tableHead"></thead>
+		<tbody id="tableBody"></tbody>
+	</table>
+</div>
 
 <div id="manualModal" class="modal">
 	<div class="modal-content" style="width: 350px">
@@ -369,10 +428,7 @@
 						value="First, Last, Class"
 						checked
 						style="width: auto; margin-right: 0.5rem" />
-					<strong>First Name, Surname, Class</strong>
-					<span style="color: #6c757d"
-						>(e.g. John, Smith, 12D)</span
-					></label
+					<strong>First Name, Surname, Class</strong></label
 				>
 				<label
 					style="
@@ -385,10 +441,7 @@
 						name="format"
 						value="Last, First, Class"
 						style="width: auto; margin-right: 0.5rem" />
-					<strong>Surname, First Name, Class</strong>
-					<span style="color: #6c757d"
-						>(e.g. Smith, John, 12D)</span
-					></label
+					<strong>Surname, First Name, Class</strong></label
 				>
 				<label style="display: block; cursor: pointer"
 					><input
@@ -396,10 +449,7 @@
 						name="format"
 						value="Last First Class"
 						style="width: auto; margin-right: 0.5rem" />
-					<strong>Surname First Name Class</strong>
-					<span style="color: #6c757d"
-						>(e.g. Smith John 12D)</span
-					></label
+					<strong>Surname First Name Class</strong></label
 				>
 			</div>
 			<textarea
@@ -444,9 +494,7 @@
 			action="{{ url_for('bulk_update_classes', id=cohort.id) }}">
 			<p style="margin-top: 0; color: #495057">
 				Paste the student names alongside their
-				<strong>new Year 13 class</strong>. The system will match them
-				by name and append the new class, preserving their historical
-				Y12 class.
+				<strong>new Year 13 class</strong>.
 			</p>
 			<div
 				style="
@@ -531,34 +579,22 @@
 {% endif %}
 
 <script>
-	// --- Custom Dropdown Logic ---
-	function toggleDropdown(id) {
-	    document.getElementById(id).classList.toggle("show");
-	}
-
+	function toggleDropdown(id) { document.getElementById(id).classList.toggle("show"); }
 	function updateDropdown() {
 	    const checkboxes = document.querySelectorAll('#classDropdown input:checked');
 	    const btn = document.getElementById('classDropdownBtn');
-	    if (checkboxes.length === 0) {
-	        btn.innerHTML = 'All Classes <span style="font-size: 0.7rem;">▼</span>';
-	    } else {
-	        btn.innerHTML = `${checkboxes.length} Selected <span style="font-size: 0.7rem;">▼</span>`;
-	    }
+	    if (checkboxes.length === 0) btn.innerHTML = 'All Classes <span style="font-size: 0.7rem;">▼</span>';
+	    else btn.innerHTML = `${checkboxes.length} Selected <span style="font-size: 0.7rem;">▼</span>`;
 	}
-
-	// Close dropdown if clicked outside
 	window.onclick = function(event) {
 	    if (!event.target.matches('.dropdown-btn') && !event.target.closest('.custom-dropdown')) {
 	        var dropdowns = document.getElementsByClassName("dropdown-content");
 	        for (var i = 0; i < dropdowns.length; i++) {
-	            if (dropdowns[i].classList.contains('show')) {
-	                dropdowns[i].classList.remove('show');
-	            }
+	            if (dropdowns[i].classList.contains('show')) dropdowns[i].classList.remove('show');
 	        }
 	    }
 	}
 
-	// --- Table Render Logic ---
 	const matrix = {{ matrix | safe }};
 	const students = {{ students_json | safe }};
 	const cohort_id = {{ cohort.id }};
@@ -578,9 +614,11 @@
 	    <th></th>`;
 
 	matrix.forEach(p => {
-	    topRow += `<th colspan="${p.skills.length}">
+	    // Updated to span the skills length + 1 for the Present column
+	    topRow += `<th colspan="${p.skills.length + 1}">
 	        <a href="/cohort/${cohort_id}/practical/${p.id}/bulk_mark" class="prac-header-link" title="Open Bulk Mark Grid">${p.name}</a>
 	    </th>`;
+	    subRow += `<th style="background-color: #e0f0ff;">Present</th>`;
 	    p.skills.forEach(sk => subRow += `<th>${sk}</th>`);
 	});
 	topRow += `</tr>`; subRow += `</tr>`;
@@ -590,7 +628,6 @@
 	    let term = document.getElementById('searchInput').value.toLowerCase();
 	    let sortMode = document.getElementById('sortSelect').value;
 	    let showFailing = document.getElementById('failFilter').checked;
-
 	    let selectedClasses = Array.from(document.querySelectorAll('#classDropdown input:checked')).map(cb => cb.value);
 
 	    let filtered = students.filter(s => {
@@ -607,10 +644,14 @@
 	    });
 
 	    let tbodyHtml = '';
+	    let orderedVisibleIds = [];
+
 	    filtered.forEach(s => {
+	        orderedVisibleIds.push(s.id);
+
 	        let rowHtml = `<tr class="student-row">
 	            <td class="pinned-col student-name-cell" style="display:flex; gap:0.5rem; align-items:center;">
-	                <input type="checkbox" name="student_ids" value="${s.id}" class="student-cb" style="width:auto;margin:0;" onclick="event.stopPropagation(); toggleDeleteBtn();">
+	                <input type="checkbox" name="student_ids" form="deleteStudentsForm" value="${s.id}" class="student-cb" style="width:auto;margin:0;" onclick="event.stopPropagation(); toggleDeleteBtn();">
 	                <span onclick="window.location.href='/student/${s.id}'" style="width:100%; height:100%; display:block;">${s.last_name}, ${s.first_name}</span>
 	            </td>
 	            <td style="color: #495057; font-weight:500;">${s.display_class}</td>
@@ -618,6 +659,14 @@
 	            <td style="color:${s.status==='Fail'?'#dc3545':'#198754'}; font-weight:bold;">${s.status}</td>`;
 
 	        matrix.forEach(p => {
+	            // Add the Present cell right before the skill loops
+	            let is_present = s.attendance_cells && s.attendance_cells[p.id];
+	            let att_color = is_present ? '#dc3545' : '#dc3545';
+	            let att_bg = is_present ? '#d1e7dd' : 'transparent';
+
+	            rowHtml += `<td class="prac-cell" style="color: ${att_color};" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${is_present ? '✓' : '✗'}</td>`;
+
+	            // Add the standard skills
 	            p.skills.forEach(sk => {
 	                let checked = s.assessed_cells[p.id] && s.assessed_cells[p.id][sk];
 	                rowHtml += `<td class="prac-cell" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${checked ? '✓' : ''}</td>`;
@@ -627,6 +676,8 @@
 	        tbodyHtml += rowHtml;
 	    });
 	    tbody.innerHTML = tbodyHtml;
+
+	    document.getElementById('filteredStudentIds').value = orderedVisibleIds.join(',');
 	}
 
 	['keyup','change'].forEach(evt => {

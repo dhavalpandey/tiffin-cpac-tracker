@@ -7,7 +7,10 @@
 		padding-bottom: 1.5rem;
 		margin-bottom: 3rem;
 	}
+
+	/* Added position: relative so we can pin the download circle to the corner */
 	.card {
+		position: relative;
 		flex: 1;
 		min-width: 280px;
 		max-width: 400px;
@@ -24,6 +27,10 @@
 		margin-top: 0;
 		font-size: 1.5rem;
 		margin-bottom: 0.5rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding-right: 2rem; /* padding prevents text overlapping button */
 	}
 	.section-header {
 		display: flex;
@@ -32,28 +39,78 @@
 		margin-bottom: 1.5rem;
 		margin-top: 1rem;
 	}
+
+	/* New Circular Download Button Styling */
+	.download-circle {
+		width: 36px;
+		height: 36px;
+		background-color: #f8f9fa;
+		color: var(--primary);
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-decoration: none;
+		border: 1px solid var(--border);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		transition: all 0.2s ease;
+	}
+	.download-circle:hover {
+		background-color: var(--primary);
+		color: white;
+		transform: translateY(-2px);
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+	}
+
+	/* Tooltip Container fixed to top right */
+	.tooltip-container {
+		position: absolute;
+		top: 1.2rem;
+		right: 1.2rem;
+		display: inline-flex;
+	}
+
+	/* Tooltip adjusted to drop down from the right edge */
+	.tooltip-container .tooltip-text {
+		visibility: hidden;
+		width: max-content;
+		max-width: 200px;
+		background-color: #333;
+		color: #fff;
+		text-align: center;
+		border-radius: 6px;
+		padding: 0.5rem 0.8rem;
+		position: absolute;
+		z-index: 10;
+		top: 125%;
+		right: 0;
+		opacity: 0;
+		transition: opacity 0.2s;
+		font-size: 0.8rem;
+		font-weight: normal;
+		font-family:
+			-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		pointer-events: none;
+		line-height: 1.4;
+	}
+	.tooltip-container .tooltip-text::after {
+		content: "";
+		position: absolute;
+		bottom: 100%;
+		right: 13px;
+		border-width: 5px;
+		border-style: solid;
+		border-color: transparent transparent #333 transparent;
+	}
+	.tooltip-container:hover .tooltip-text {
+		visibility: visible;
+		opacity: 1;
+	}
 </style>
 
 <div class="section-header">
 	<h2 style="margin: 0">Cohorts Dashboard</h2>
 	<div style="display: flex; gap: 1rem">
-		<a
-			href="{{ url_for('export_data') }}"
-			class="btn btn-outline"
-			style="display: flex; align-items: center; gap: 0.5rem">
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="16"
-				height="16"
-				fill="currentColor"
-				viewBox="0 0 16 16">
-				<path
-					d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
-				<path
-					d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
-			</svg>
-			Export All Data
-		</a>
 		<button
 			class="btn"
 			onclick="
@@ -67,6 +124,27 @@
 <div class="carousel">
 	{% for c in cohorts %}
 	<div class="card">
+		<div class="tooltip-container">
+			<a
+				href="{{ url_for('export_cohort', id=c.id) }}"
+				class="download-circle">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="16"
+					height="16"
+					fill="currentColor"
+					viewBox="0 0 16 16">
+					<path
+						d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
+					<path
+						d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
+				</svg>
+			</a>
+			<span class="tooltip-text"
+				>Download complete, unfiltered cohort data to Excel</span
+			>
+		</div>
+
 		<div>
 			<h3>{{ c.title }}</h3>
 			<p style="color: #6c757d; margin-top: 0">{{ c.years }}</p>
@@ -74,6 +152,7 @@
 				<strong>{{ c.student_count }}</strong> Students
 			</p>
 		</div>
+
 		<div style="display: flex; gap: 0.5rem; margin-top: 1rem">
 			<a
 				href="{{ url_for('cohort_view', id=c.id) }}"
