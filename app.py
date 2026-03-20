@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv() 
 
 app = Flask(__name__)
+application = app
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-dev-key-only')
 
 # --- DATABASE CONFIGURATION ---
@@ -864,3 +865,4 @@ with app.app_context():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+    
