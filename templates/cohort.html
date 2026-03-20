@@ -219,17 +219,16 @@
 			">
 			+ Bulk Add
 		</button>
-		{% if is_y13 %}
+
 		<button
 			class="btn"
-			style="background: #198754; border: 1px solid #198754"
+			style="background: #198754; border: 1px solid #198754; color: white"
 			onclick="
 				document.getElementById('bulkUpdateModal').style.display =
 					'flex'
 			">
-			Bulk Update Y13 Classes
+			Bulk Update Classes
 		</button>
-		{% endif %}
 	</div>
 </div>
 
@@ -321,7 +320,6 @@
 				type="hidden"
 				name="filtered_student_ids"
 				id="filteredStudentIds" />
-
 			<div class="tooltip-container">
 				<button
 					type="submit"
@@ -483,18 +481,18 @@
 	</div>
 </div>
 
-{% if is_y13 %}
 <div id="bulkUpdateModal" class="modal">
 	<div class="modal-content" style="width: 550px">
 		<h3 style="margin-top: 0; margin-bottom: 1.5rem">
-			Bulk Update Year 13 Classes
+			Bulk Update Classes
 		</h3>
 		<form
 			method="POST"
 			action="{{ url_for('bulk_update_classes', id=cohort.id) }}">
 			<p style="margin-top: 0; color: #495057">
 				Paste the student names alongside their
-				<strong>new Year 13 class</strong>.
+				<strong>new class</strong>. The system will automatically update
+				their class for the current academic year.
 			</p>
 			<div
 				style="
@@ -576,7 +574,6 @@
 		</form>
 	</div>
 </div>
-{% endif %}
 
 <script>
 	function toggleDropdown(id) { document.getElementById(id).classList.toggle("show"); }
@@ -614,7 +611,6 @@
 	    <th></th>`;
 
 	matrix.forEach(p => {
-	    // Updated to span the skills length + 1 for the Present column
 	    topRow += `<th colspan="${p.skills.length + 1}">
 	        <a href="/cohort/${cohort_id}/practical/${p.id}/bulk_mark" class="prac-header-link" title="Open Bulk Mark Grid">${p.name}</a>
 	    </th>`;
@@ -659,12 +655,11 @@
 	            <td style="color:${s.status==='Fail'?'#dc3545':'#198754'}; font-weight:bold;">${s.status}</td>`;
 
 	        matrix.forEach(p => {
-	            // Add the Present cell right before the skill loops
 	            let is_present = s.attendance_cells && s.attendance_cells[p.id];
-	            let att_color = is_present ? '#dc3545' : '#dc3545';
-	            let att_bg = is_present ? '#d1e7dd' : 'transparent';
+	            let att_color = '#084298'
+	            let att_bg = '#eef3fc';
 
-	            rowHtml += `<td class="prac-cell" style="color: ${att_color};" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${is_present ? '✓' : '✗'}</td>`;
+	            rowHtml += `<td class="prac-cell" style="color: ${att_color}; background-color: ${att_bg};" data-pracid="${p.id}" onclick="window.location.href='/grade/${s.id}/${p.id}'">${is_present ? '✓' : '✗'}</td>`;
 
 	            // Add the standard skills
 	            p.skills.forEach(sk => {
