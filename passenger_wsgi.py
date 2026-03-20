@@ -1,9 +1,13 @@
-import os
 import sys
+import os
 
-# Tell the server to look in this directory for your app
-sys.path.insert(0, os.path.dirname(__file__))
+# Get the absolute path of the directory containing this file (tiffin-cpac)
+current_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Import your Flask app (from app.py) and rename it to 'application'
-# Passenger explicitly requires the app variable to be named 'application'
+# Add this directory to the Python system path so it can find app.py
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
+
+# Import your Flask app
+# This assumes your Flask instance is named 'app' inside your 'app.py' file
 from app import app as application
