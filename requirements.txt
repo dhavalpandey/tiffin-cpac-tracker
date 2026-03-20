@@ -1,7 +1,7 @@
-Flask
-Flask-SQLAlchemy
-Flask-Login
-Werkzeug
-gunicorn
-openpyxl
-dotenv
+Flask==2.0.3
+Werkzeug==2.0.3
+Flask-SQLAlchemy==2.5.1
+SQLAlchemy==1.4.46
+Flask-Login==0.6.2
+openpyxl==3.1.2
+python-dotenv==1.0.1
